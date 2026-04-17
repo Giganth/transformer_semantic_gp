@@ -1,0 +1,52 @@
+# Transformer model configuration
+model:
+
+  # Model architecture
+  num_stacks: 2  # Number of encoder/decoder layers
+  num_heads: 8  # Number of attention heads
+  dropout_rate: 0.1
+  latent_dim: 512
+  embed_dim: 128
+  max_length: 100  # Maximum sequence length
+  
+  # Settings for pretraining
+  batch_size: 256
+  learning_rate: 0.001
+  decay_steps: 550000
+  max_epochs: 8
+  val_split_ratio: 0.1
+  
+  # Data parameters
+  max_samples_per_file: 5000000  # Maximum samples to load per archive file
+  
+  # Feature flags - what additional inputs to include
+  include_semantic_distance: True   # Include semantic distance as input
+  include_dimensionality: True      # Include number of variables as input
+  
+  # Architecture mode
+  legacy_mode: False  # If True, use flat architecture for old weight compatibility; If False, use nested encoder/decoder architecture (default: False)
+  
+  # Settings for vocabulary. Defines the token of the transformer and thus which functions can be created
+  'functions'  : ['add', 'sub', 'mul', 'div','pow'] 
+  'variables'  : ['x0','x1', 'x2', 'x3', 'x4']
+  'ephemerals' : [-5.0,-4.0,-3.0,-2.0,-1.0,-0.5,-0.4,-0.3,-0.2,-0.1, 0.0, 0.1,0.2 ,0.3, 0.4,0.5,1.0,2.0,3.0,4.0,5.0]
+
+
+  # Data paths - directories containing training archives
+  # Update these paths to match your generated archives from data generation step
+  # Example: if you generated archives to experiments_data/GP_Archive_5,
+  # update the paths below accordingly
+  archive_directories:
+    - 'experiments_data/GP_Archive_2'  # 2D problems
+    - 'experiments_data/GP_Archive_3'  # 3D problems
+    - 'experiments_data/GP_Archive_4'  # 4D problems
+    - 'experiments_data/GP_Archive_5'  # 5D problems
+  
+  # Model save/load path
+  model_directory: 'src/TSGP/transformer/models/TSGP.weights.h5'
+
+# Console output
+console_out: True
+
+# GPU Usage
+use_gpu: True  # Whether to use GPU for TensorFlow operations (default: True)

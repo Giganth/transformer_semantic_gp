@@ -1,0 +1,235 @@
+# src/TSGP/transformer/utils.py
+"""Utility functions for Transformer model."""
+
+import tensorflow as tf
+from typing import List, Dict
+from keras.layers import TextVectorization
+
+
+def generate_vocab(functions: List[str], variables: List[str], ephemerals: List[float]) -> List[str]:
+    """
+    Generate vocabulary from functions, variables, and ephemeral constants.
+    
+    Args:
+        functions: List of function names (e.g., ['add', 'sub', 'mul', 'div'])
+        variables: List of variable names (e.g., ['x0', 'x1', 'x2'])
+        ephemerals: List of ephemeral constant values (e.g., [-1.0, 0.0, 1.0])
+        
+    Returns:
+        List of vocabulary tokens including special tokens (padding, unknown),
+        functions, variables, ephemerals, and control tokens [start] and [end].
+        
+        Order is important for TextVectorization:
+        - Index 0: "" (padding token)
+        - Index 1: "[UNK]" (unknown token)
+        - Index 2+: functions
+        - Index n+: variables
+        - Index m+: ephemerals
+        - Index k: "[start]"
+        - Index k+1: "[end]"
+    """
+    vocab = []
+    
+    # Add special tokens for TextVectorization (MUST be first)
+    vocab.append("")        # Index 0 - padding token
+    vocab.append("[UNK]")   # Index 1 - unknown/out-of-vocabulary token
+    
+    # Add functions
+    vocab.extend(functions)
+    
+    # Add variables
+    vocab.extend(variables)
+    
+    # Add ephemeral constants (converted to strings)
+    ephemeral_strs = [str(float(eph)) for eph in ephemerals]
+    vocab.extend(ephemeral_strs)
+    
+    vocab.append("[start]")
+    vocab.append("[end]")
+    
+    return vocab
+
+
+def get_function_arity(function_name: str) -> int:
+    """
+    Get the arity (number of arguments) for a given function.
+    
+    Args:
+        function_name: Name of the function
+        
+    Returns:
+        Arity of the function (number of arguments it takes)
+    """
+    # Binary operators
+    binary_ops = ['add', 'sub', 'mul', 'div', 'pow']
+    
+    # Unary operators. Not supported yet.
+    unary_ops = ['sin', 'cos', 'tan', 'exp', 'log']
+
+    if function_name in binary_ops:
+        return 2
+    elif function_name in unary_ops:
+        return 1
+    else:
+        # Default to binary for unknown functions
+        return 2
+
+
+def generate_vocab_arity_dict(vocab: List[str], functions: List[str]) -> Dict[int, int]:
+    """
+    Create a dictionary mapping vocabulary token indices to their arities.
+    
+    Args:
+        vocab: List of vocabulary tokens
+        functions: List of function names
+        
+    Returns:
+        Dictionary mapping token index to arity (0 for terminals, >0 for functions)
+    """
+    arity_dict = {}
+    
+    for idx, token in enumerate(vocab):
+        if token in functions:
+            # Function - get its arity
+            arity_dict[idx] = get_function_arity(token)
+        else:
+            # Terminal (variable, constant, or special token) - arity 0
+            arity_dict[idx] = 0
+    
+    return arity_dict
+
+
+def get_terminal_keys(vocab: List[str], functions: List[str]) -> List[int]:
+    """
+    Get indices of terminal tokens (variables and constants) in vocabulary.
+    
+    Args:
+        vocab: List of vocabulary tokens
+        functions: List of function names
+        
+    Returns:
+        List of indices corresponding to terminal tokens (excludes functions and ALL special tokens)
+    """
+    terminal_keys = []
+    
+    # Special tokens to exclude (padding, unknown, control tokens)
+    special_tokens = ["", "[UNK]", "[start]", "[end]"]
+    
+    for idx, token in enumerate(vocab):
+        # Exclude special tokens and functions
+        if token not in functions and token not in special_tokens:
+            terminal_keys.append(idx)
+    
+    return terminal_keys
+
+
+def get_function_keys(vocab: List[str], functions: List[str]) -> List[int]:
+    """
+    Get indices of function tokens in vocabulary.
+    
+    Args:
+        vocab: List of vocabulary tokens
+        functions: List of function names
+        
+    Returns:
+        List of indices corresponding to function tokens
+    """
+    function_keys = []
+    
+    for idx, token in enumerate(vocab):
+        if token in functions:
+            function_keys.append(idx)
+    
+    return function_keys
+
+
+def create_vectorization(vocab_data: List[str], flags: bool = True, max_length: int = None, ragged: bool = False):
+    """
+    Create a vectorization layer for the given vocabulary.
+    
+    Args:
+        vocab_data: List of vocabulary tokens (should already include "", "[UNK]", "[start]", "[end]")
+        flags: If True, uses decoder mode (with [start]/[end]). If False, encoder mode
+        config: Configuration dictionary containing max_length
+        max_length: Maximum sequence length (overrides config if provided)
+        ragged: If True, creates ragged tensors (variable length sequences)
+        
+    Returns:
+        TextVectorization layer configured with the vocabulary
+        
+    Note:
+        vocab_data should be generated by generate_vocab() which includes:
+        - "" at index 0 (padding)
+        - "[UNK]" at index 1 (unknown)
+        - functions, variables, ephemerals
+        - "[start]" and "[end]" at the end
+    """
+    
+    # Adjust max_length for decoder
+    if flags:
+        actual_max_length = max_length + 1  # +1 for [start] token
+
+    else:
+        actual_max_length = max_length
+    
+    
+    # Force CPU execution for TextVectorization (unnecessary GPU operation)
+    with tf.device('/CPU:0'):
+        vectorization = TextVectorization(
+            output_mode="int",
+            output_sequence_length=actual_max_length if not ragged else None,
+            ragged=ragged,
+            standardize=None,
+            vocabulary=vocab_data
+        )
+    
+    return vectorization
+
+
+def prepare_transformer_config(config: dict) -> dict:
+    """
+    Prepare the configuration for TransformerModel by generating vocabulary
+    and all derived values.
+    
+    Args:
+        config: Base configuration dictionary with 'functions', 'variables', 'ephemerals'
+        
+    Returns:
+        Updated configuration dictionary with vocab, vocab_arity_dict, terminal_keys, 
+        function_keys, dec_vocab, and vocab_size
+    """
+    # Extract base parameters
+    functions = config['functions']
+    variables = config['variables']
+    ephemerals = config['ephemerals']
+
+    # Generate vocabulary
+    vocab = generate_vocab(functions, variables, ephemerals)
+
+    # Generate derived values
+    vocab_arity_dict = generate_vocab_arity_dict(vocab, functions)
+    terminal_keys = get_terminal_keys(vocab, functions)
+    function_keys = get_function_keys(vocab, functions)
+
+    # Update config
+    config['dec_vocab'] = vocab
+    config['vocab_arity_dict'] = vocab_arity_dict
+    config['terminal_keys'] = terminal_keys
+    config['function_keys'] = function_keys
+    config['vocab_size'] = len(vocab)
+    
+    return config
+
+def transform_deap_ind_to_keras_string(ind):
+    ind_string = str(ind)
+    # Adjust formatting to match Keras expected format.
+    adjusted_string = str(ind_string).replace("(", " ").replace(")", "").replace(",", "").replace("-0.0","0.0")
+    return adjusted_string
+
+def transform_deap_population_to_keras_strings(population):
+    keras_strings = []
+    for ind in population:
+        adjusted_string = transform_deap_ind_to_keras_string(ind)
+        keras_strings.append(adjusted_string)
+    
+    return keras_strings
