@@ -128,6 +128,12 @@ DATA_GENERATOR_DEFAULTS = {
         # Standard NumPy functions (sin, cos, exp, log, sqrt, …) are available.
         # Example: "sin(x0) + x1**2"
         'target_function': None,
+        # Optional pool of target functions for 'target_function' mode.
+        # When set to a non-empty list, one function is randomly selected per
+        # run using the run's random_seed, giving each GP job a different
+        # non-linear landscape and maximising archive diversity across many runs.
+        # Example: ["sin(x0) + x1**2", "x0**3 - x1", "exp(-x0) * cos(x1)"]
+        'target_function_pool': None,
         # Input range [low, high] for uniform sampling when using target_function.
         'input_range': [-1.0, 1.0],
         'num_samples_dataset': 1000,

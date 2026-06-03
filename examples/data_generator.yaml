@@ -39,21 +39,65 @@ problem:
   standardization: True  # Whether to standardize data
 
 data_generator:
-  # Dataset generation mode:
+  # ── Dataset generation mode ────────────────────────────────────────────────
   #   'make_regression'  – random linear dataset via sklearn.datasets.make_regression
-  #   'target_function'  – evaluate a user-supplied symbolic expression
-  dataset_generation: make_regression
-  # Symbolic expression used when dataset_generation is 'target_function'.
-  # Variables must be named x0, x1, … matching num_features.
-  # Safe NumPy math functions (sin, cos, exp, log, sqrt, power, …) are available.
-  # Uncomment one of the following to use a specific target function:
+  #   'target_function'  – evaluate a single user-supplied symbolic expression
+  #
+  # Choosing 'target_function' (with a pool, see below) is strongly recommended
+  # when you want the transformer to generalise to non-linear problems.  Each
+  # independent GP run then contributes semantics from a different non-linear
+  # landscape, which teaches the transformer how to navigate polynomial,
+  # trigonometric, and mixed curvature regimes — diversity that 'make_regression'
+  # cannot provide.
+  dataset_generation: target_function
+
+  # ── Single fixed target function ───────────────────────────────────────────
+  # Used when dataset_generation is 'target_function' and target_function_pool
+  # is absent or empty.  Variables must be named x0 … x{num_features-1}.
+  # Safe NumPy math (sin, cos, exp, log, sqrt, power, …) is available.
   # target_function: "sin(x0) + x1**2"
-  # target_function: "x0**3 - 2*x1 + cos(x2)"
-  # Input range [low, high] for uniform input sampling when using target_function.
-  # input_range: [-1.0, 1.0]
+
+  # ── Target function pool (recommended for large-scale data generation) ─────
+  # When set, one function is picked at random per run using the run's
+  # random_seed, so that 50 parallel runs automatically cover 50 diverse
+  # landscapes without any manual per-run configuration.
+  #
+  # The pool below mixes five structural families that are known to create
+  # challenging, non-linear fitness landscapes for GP:
+  #   • polynomial  — multi-modal in high dimensions
+  #   • trigonometric — periodic, many local optima
+  #   • exponential/decay — steep gradients, asymmetric
+  #   • mixed trig+poly — coupled non-linearity
+  #   • rational-like (pow with negative exponent) — singularities, sharp peaks
+  target_function_pool:
+    # 5-variable polynomials
+    - "x0**3 - 2*x1**2 + x0*x1 + x2 - x3*x4"
+    - "x0**2 + x1**2 - x0*x1 + x2**2 - x3 + x4"
+    - "x0**4 - 3*x0**2*x1 + x1**3 - x2*x3 + x4**2"
+    # trigonometric
+    - "sin(x0) + cos(x1) + x2 - x3*x4"
+    - "sin(x0 * x1) + cos(x2) - x3 + x4"
+    - "sin(x0) * cos(x1) + sin(x2) - x3**2 + x4"
+    - "sin(x0**2 + x1**2) + x2 - x3*x4"
+    # exponential / decay
+    - "exp(-x0**2) * cos(x1) + x2 - x3 + x4"
+    - "exp(x0) - exp(-x1) + x2 * x3 - x4"
+    - "log(abs(x0) + 1) + sqrt(abs(x1)) + x2 - x3*x4"
+    # mixed trig + poly
+    - "sin(x0) + x1**2 - x0*x1 + x2*x3 - x4"
+    - "x0**2 * sin(x1) + x2**2 * cos(x3) - x4"
+    - "sin(x0) / (abs(x1) + 1) + x2 - x3**2 + x4"
+    # higher-order interactions
+    - "x0**2 * x1 - x0 * x1**2 + x2*x3*x4"
+    - "power(abs(x0), 1.5) - power(abs(x1), 0.5) + x2 - x3*x4"
+
+  # Input range for uniform sampling (applies to all pool functions).
+  # Keep within [-2, 2] to avoid explosion in exp / power terms.
+  input_range: [-2.0, 2.0]
+
   num_samples_dataset: 1000 # Number of samples in the synthetic dataset which is used for the GP-Search
   num_features: 5 # Number of features in the synthetic dataset
-  noise_level: 1.0 # Standard deviation of Gaussian noise added to the target
+  noise_level: 0.5 # Noise level; use lower values for non-linear targets to preserve structure
   num_samples_archive: 20000 # Number of samples to generate for the data archive
   archive_folder: trainingdata/
   simplification: True

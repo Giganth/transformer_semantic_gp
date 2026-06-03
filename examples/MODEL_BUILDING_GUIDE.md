@@ -8,6 +8,60 @@ This guide walks you through the complete process of building a pretrained Trans
 
 ---
 
+## Why the Transformer Gets Stuck on Non-Linear Problems
+
+Before configuring data generation it is worth understanding why more training
+data from linear problems does *not* solve the local-optima issue on non-linear
+datasets.
+
+### Root causes
+
+1. **Training-distribution mismatch.**  The default `make_regression` mode
+   creates purely linear target landscapes.  The GP runs that generate training
+   data therefore evolve mostly linear or weakly non-linear expressions, and the
+   transformer learns a semantic-space topology that reflects *those* families.
+   When it is deployed on a `sin`/`exp`/polynomial target, the semantic
+   distances it generates and the mutations it proposes are miscalibrated for
+   the true landscape.
+
+2. **`target_semantic_distance` is not transferable across landscapes.**  The
+   conditioning signal that controls exploration vs. exploitation (set via
+   `variation.transformer.target_semantic_distance`) was learned relative to
+   the distribution of semantic vectors in the training archives.  On a non-
+   linear problem those vectors live in a very different region of output-space,
+   so a distance of 1.0 that causes useful exploration on a linear problem may
+   cause either micro-steps or wild jumps on a trigonometric one.
+
+3. **Semantic diversity of the archive drives transformer generalisation.**  The
+   transformer is trained on (parent → child) pairs selected by semantic
+   distance.  If every run in the archive saw a linear target, the transformer
+   never learns meaningful transition paths through non-linear semantic
+   neighbourhoods, so it cannot generate helpful offspring there at inference
+   time.
+
+4. **GP search landscape ruggedness.**  Non-linear targets have many more local
+   optima than linear ones.  Standard variation operators (crossover, point
+   mutation) are topology-blind; the transformer is supposed to escape optima by
+   proposing semantically-controlled jumps.  But it can only do so reliably if
+   it saw analogous non-linear topology during training.
+
+### What to do
+
+- **Diversify the target functions** used when generating training archives.
+  Each GP run should ideally evolve on a *different* non-linear landscape so
+  that the combined archive covers a wide range of semantic topologies.  The
+  `target_function_pool` feature (see §1.1 below) automates this.
+- **Match `input_range` to realistic problem domains** so that the semantic
+  vectors in the training archive are representative of production inputs.
+- **Reduce noise** for non-linear targets (e.g. `noise_level: 0.5` instead of
+  `1.0`); high noise blurs the non-linear structure that the GP — and the
+  transformer — needs to learn from.
+- **Tune `target_semantic_distance`** per problem family: increase it for
+  rugged landscapes to encourage wider exploration, decrease it once the
+  transformer is tracking the attractor basin.
+
+---
+
 ## Step 1: Data Generation
 
 The first step is to generate training data by running evolutionary algorithms that produce simplified symbolic expressions along with their semantic vectors. This data will be used to train the Transformer model.
@@ -41,11 +95,46 @@ are available and variables must be named `x0`, `x1`, … matching `num_features
 data_generator:
   dataset_generation: target_function
   target_function: "sin(x0) + x1**2"  # any NumPy-compatible expression
-  input_range: [-1.0, 1.0]            # uniform sampling range for inputs
+  input_range: [-2.0, 2.0]            # uniform sampling range for inputs
   num_features: 2
   num_samples_dataset: 1000
   noise_level: 0.1
 ```
+
+#### Using a function pool for automatic diversity (recommended)
+
+Running many independent GP jobs with a **fixed** target function still limits
+the semantic diversity of the combined archive — all runs cluster around the
+same attractor.  The `target_function_pool` key solves this: set it to a list
+of expressions and each run will randomly select one (seeded by the run's
+`random_seed`), so 50 parallel runs automatically cover 50 landscapes with no
+extra manual configuration.
+
+```yaml
+data_generator:
+  dataset_generation: target_function
+  input_range: [-2.0, 2.0]
+  target_function_pool:
+    # polynomial families
+    - "x0**3 - 2*x1**2 + x0*x1 + x2 - x3*x4"
+    - "x0**2 + x1**2 - x0*x1 + x2**2 - x3 + x4"
+    - "x0**4 - 3*x0**2*x1 + x1**3 - x2*x3 + x4**2"
+    # trigonometric
+    - "sin(x0) + cos(x1) + x2 - x3*x4"
+    - "sin(x0 * x1) + cos(x2) - x3 + x4"
+    - "sin(x0**2 + x1**2) + x2 - x3*x4"
+    # exponential / decay
+    - "exp(-x0**2) * cos(x1) + x2 - x3 + x4"
+    - "log(abs(x0) + 1) + sqrt(abs(x1)) + x2 - x3*x4"
+    # mixed
+    - "sin(x0) + x1**2 - x0*x1 + x2*x3 - x4"
+    - "x0**2 * sin(x1) + x2**2 * cos(x3) - x4"
+  num_features: 5
+  num_samples_dataset: 1000
+  noise_level: 0.5
+```
+
+The pool covers five structural families — polynomials, trigonometric, exponential/decay, mixed, and rational-like — that create qualitatively different fitness landscapes.  Including all of them in the training archive is what teaches the transformer to navigate non-linear problems at inference time.
 
 Using `target_function` mode lets you focus the GP search (and thus the
 training data) on the structural diversity around a specific target you care

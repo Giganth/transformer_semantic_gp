@@ -44,6 +44,12 @@ class DataGenerator(StandardGP):
           available.  The number of variables is inferred from
           ``config['data_generator']['num_features']``.
 
+          Optionally, a ``target_function_pool`` list may be provided.  When
+          present, one function is selected at random (seeded by
+          ``random_seed``) from the pool for each run, so that running many
+          independent GP jobs automatically covers a diverse set of target
+          landscapes without manual per-run configuration.
+
         Returns:
             tuple: (X_train, Y_train, X_test, Y_test, X_semantic,
                     variable_names, function_string)
@@ -55,8 +61,19 @@ class DataGenerator(StandardGP):
         dataset_generation = self.config['data_generator'].get('dataset_generation', 'make_regression')
 
         if dataset_generation == 'target_function':
+            # If a pool of functions is provided, pick one at random using the
+            # run's random seed so that each independent run draws a different
+            # function while remaining fully reproducible.  The selection is
+            # stored in a local variable to avoid mutating the shared config.
+            function_pool = self.config['data_generator'].get('target_function_pool')
+            if function_pool:
+                pool_rng = np.random.default_rng(random_seed)
+                selected_function = str(pool_rng.choice(function_pool))
+            else:
+                selected_function = None
             X, Y, function_string = self._generate_from_target_function(
-                num_samples_dataset, num_features, noise_level, random_seed
+                num_samples_dataset, num_features, noise_level, random_seed,
+                target_function=selected_function,
             )
         else:
             # Default: make_regression
@@ -97,14 +114,19 @@ class DataGenerator(StandardGP):
         num_features: int,
         noise_level: float,
         random_seed: int,
+        target_function: str = None,
     ) -> Tuple[np.ndarray, np.ndarray, str]:
         """
         Generate a dataset by evaluating a user-defined target function.
 
-        The target function string is read from
-        ``config['data_generator']['target_function']``.  Variables must be
-        named ``x0``, ``x1``, … matching ``num_features``.  Input values are
-        drawn uniformly from the range specified by
+        The target function string is resolved in the following order:
+
+        1. The ``target_function`` argument (e.g. a value selected from a pool
+           by the caller).
+        2. ``config['data_generator']['target_function']`` as a fallback.
+
+        Variables must be named ``x0``, ``x1``, … matching ``num_features``.
+        Input values are drawn uniformly from the range specified by
         ``config['data_generator'].get('input_range', [-1, 1])``.
 
         Args:
@@ -112,6 +134,8 @@ class DataGenerator(StandardGP):
             num_features: Number of input variables (``x0`` … ``x{n-1}``).
             noise_level: Standard deviation of Gaussian noise added to ``Y``.
             random_seed: Random seed for reproducibility.
+            target_function: Expression string to evaluate.  When *None* the
+                value is read from the config.
 
         Returns:
             tuple: (X, Y, function_string) where X has shape
@@ -121,7 +145,8 @@ class DataGenerator(StandardGP):
             ValueError: If ``target_function`` is missing from the config or
                 evaluation fails.
         """
-        target_function = self.config['data_generator'].get('target_function')
+        if target_function is None:
+            target_function = self.config['data_generator'].get('target_function')
         if not target_function:
             raise ValueError(
                 "dataset_generation is set to 'target_function' but "
