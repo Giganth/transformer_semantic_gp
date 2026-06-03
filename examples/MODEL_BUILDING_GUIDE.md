@@ -18,6 +18,39 @@ Create or modify your data generation configuration file (e.g., `examples/data_g
 
 Note that "num_features" controls the dimensionality.
 
+#### Dataset Generation Modes
+
+Two modes are available via the `dataset_generation` key:
+
+**`make_regression` (default)** – generates a random linear regression dataset
+using [`sklearn.datasets.make_regression`](https://scikit-learn.org/stable/modules/generated/sklearn.datasets.make_regression.html):
+
+```yaml
+data_generator:
+  dataset_generation: make_regression
+  num_features: 5
+  num_samples_dataset: 1000
+  noise_level: 1.0
+```
+
+**`target_function`** – generates data by evaluating a user-supplied symbolic
+expression.  Standard NumPy functions (`sin`, `cos`, `exp`, `log`, `sqrt`, …)
+are available and variables must be named `x0`, `x1`, … matching `num_features`:
+
+```yaml
+data_generator:
+  dataset_generation: target_function
+  target_function: "sin(x0) + x1**2"  # any NumPy-compatible expression
+  input_range: [-1.0, 1.0]            # uniform sampling range for inputs
+  num_features: 2
+  num_samples_dataset: 1000
+  noise_level: 0.1
+```
+
+Using `target_function` mode lets you focus the GP search (and thus the
+training data) on the structural diversity around a specific target you care
+about, which can improve the transformer's performance on related problems.
+
 ### 1.2 Initialize Multiple Runs
 
 Use the `initialize.py` script to create multiple experimental runs with different random seeds. This creates pickle files for each run that will be executed in parallel.

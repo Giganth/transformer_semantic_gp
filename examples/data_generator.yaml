@@ -39,7 +39,19 @@ problem:
   standardization: True  # Whether to standardize data
 
 data_generator:
-  dataset_generation: make_regression  # 'make_regression'
+  # Dataset generation mode:
+  #   'make_regression'  – random linear dataset via sklearn.datasets.make_regression
+  #   'target_function'  – evaluate a user-supplied symbolic expression
+  dataset_generation: make_regression
+  # Symbolic expression used when dataset_generation is 'target_function'.
+  # Variables must be named x0, x1, … matching num_features.
+  # Standard NumPy functions (sin, cos, exp, log, sqrt, …) are available.
+  # Examples:
+  #   target_function: "sin(x0) + x1**2"
+  #   target_function: "x0**3 - 2*x1 + cos(x2)"
+  # target_function: null
+  # Input range [low, high] for uniform sampling when using target_function.
+  # input_range: [-1.0, 1.0]
   num_samples_dataset: 1000 # Number of samples in the synthetic dataset which is used for the GP-Search
   num_features: 5 # Number of features in the synthetic dataset
   noise_level: 1.0 # Standard deviation of Gaussian noise added to the target

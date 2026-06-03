@@ -119,7 +119,17 @@ DATA_GENERATOR_DEFAULTS = {
     **STANDARD_GP_DEFAULTS,  # Inherit most settings
     'algorithm': 'data_generator',
     'data_generator': {
-        'dataset_generation': 'make_regression', # 'make_regression'
+        # Dataset generation mode:
+        #   'make_regression'   – random linear dataset (sklearn)
+        #   'target_function'   – evaluate a user-supplied symbolic expression
+        'dataset_generation': 'make_regression',
+        # Symbolic expression used when dataset_generation == 'target_function'.
+        # Variables must be named x0, x1, … matching num_features.
+        # Standard NumPy functions (sin, cos, exp, log, sqrt, …) are available.
+        # Example: "sin(x0) + x1**2"
+        'target_function': None,
+        # Input range [low, high] for uniform sampling when using target_function.
+        'input_range': [-1.0, 1.0],
         'num_samples_dataset': 1000,
         'num_features': 5,
         'noise_level': 1.0,
