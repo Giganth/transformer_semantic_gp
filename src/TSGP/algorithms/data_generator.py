@@ -129,18 +129,38 @@ class DataGenerator(StandardGP):
             )
 
         input_range = self.config['data_generator'].get('input_range', [-1.0, 1.0])
+        if (
+            not hasattr(input_range, '__len__')
+            or len(input_range) != 2
+        ):
+            raise ValueError(
+                f"'input_range' must be a 2-element list [low, high], got: {input_range!r}"
+            )
         low, high = float(input_range[0]), float(input_range[1])
+        if low >= high:
+            raise ValueError(
+                f"'input_range' low ({low}) must be strictly less than high ({high})."
+            )
 
         rng = np.random.default_rng(random_seed)
         X = rng.uniform(low, high, size=(num_samples, num_features))
 
-        # Build a namespace where x0, x1, … resolve to column vectors so that
-        # the expression can be evaluated with standard NumPy broadcasting.
+        # Build a restricted namespace exposing only safe mathematical functions
+        # so that the user-supplied expression cannot access dangerous builtins.
+        _SAFE_NUMPY_NAMES = [
+            'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan', 'arctan2',
+            'sinh', 'cosh', 'tanh', 'arcsinh', 'arccosh', 'arctanh',
+            'exp', 'exp2', 'expm1', 'log', 'log2', 'log10', 'log1p',
+            'sqrt', 'cbrt', 'square', 'power', 'abs', 'absolute',
+            'sign', 'floor', 'ceil', 'round', 'clip',
+            'maximum', 'minimum', 'fmax', 'fmin',
+            'pi', 'e', 'inf', 'nan',
+        ]
         namespace = {f'x{i}': X[:, i] for i in range(num_features)}
         namespace.update({
             name: getattr(np, name)
-            for name in dir(np)
-            if not name.startswith('_') and callable(getattr(np, name))
+            for name in _SAFE_NUMPY_NAMES
+            if hasattr(np, name)
         })
 
         try:
