@@ -33,7 +33,6 @@ def main():
     
     runs_completed = 0
     
-    # Find all .pkl files (excluding metadata and monitors)
     pattern = str(experiment_folder / "**" / "run_*.pkl")
     filenames = glob.glob(pattern, recursive=True)
     
@@ -50,22 +49,18 @@ def main():
         
         filename_path = Path(filename)
         
-        # Skip metadata and monitor files
         if "metadata" in filename_path.name or "monitor" in filename_path.name:
             continue
 
-        # Skip if file doesn't exist (might have been processed by another runner)
         if not filename_path.exists():
             continue
                 
-        # Check for lock file
         lock_file = Path(str(filename_path) + ".lock")
         if lock_file.exists():
             if args.console_out:
                 print(f"Skipping locked file: {filename_path.name}")
             continue
         
-        # Create lock file
         try:
             lock_file.touch()
             if args.console_out:
@@ -80,7 +75,6 @@ def main():
         sys.stdout.flush()
         
         try:
-            # Load run data
             with open(filename_path, 'rb') as f:
                 run_data = pickle.load(f)
             
@@ -95,7 +89,6 @@ def main():
                 print(f"Dataset: {dataset}")
                 print(f"Random Seed: {config.get('random_seed')}")
             
-            # Import and initialize the appropriate algorithm
             start_time = time.time()
             
             if algorithm == 'standard_gp':
@@ -110,7 +103,6 @@ def main():
             else:
                 raise ValueError(f"Unknown algorithm: {algorithm}")
             
-            # Run the search
             if args.console_out:
                 print(f"\nStarting evolutionary search...")
             
@@ -128,7 +120,6 @@ def main():
             
             runs_completed += 1
             
-            # Remove job file and lock file
             try:
                 if args.console_out:
                     print(f"Removing job file: {filename_path}")
@@ -138,7 +129,6 @@ def main():
                     print(f"Removing lock file: {lock_file}")
                 lock_file.unlink()
                 
-                # Clean up memory
                 del algo_instance
                 del run_data
                 gc.collect()
@@ -159,7 +149,6 @@ def main():
                 import traceback
                 traceback.print_exc()
             
-            # Save error info
             error_file = filename_path.parent / f"error_run_{run_data['run_id']}.txt"
             with open(error_file, 'w') as f:
                 f.write(f"Error in run {run_data['run_id']}\n")
@@ -167,7 +156,6 @@ def main():
                 import traceback
                 traceback.print_exc(file=f)
             
-            # Remove lock file on error
             if lock_file.exists():
                 lock_file.unlink()
             

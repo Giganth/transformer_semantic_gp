@@ -1,4 +1,3 @@
-# src/TSGP/transformer/layers.py
 """Custom Transformer layers for TSGP."""
 
 import tensorflow as tf

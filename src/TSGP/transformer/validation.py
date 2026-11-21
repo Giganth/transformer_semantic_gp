@@ -1,4 +1,3 @@
-# src/TSGP/transformer/validation.py
 """Tree validation functionality for Transformer sampling."""
 
 from dataclasses import dataclass
@@ -47,19 +46,16 @@ class TreeValidator:
         Returns:
             tuple: (updated_probabilities, updated_sampled_tree)
         """
-        # Initialize tree node properties
         if sampled_token_index is None:
             arity = None
             is_open_function = None
             current_depth = 0
             no_children_nodes = None
         else:
-            # Set node properties based on previous token
             no_children_nodes = 0
             arity = self.vocab_arity_dict[sampled_token_index]
             is_open_function = (arity > 0)
             
-            # Calculate current depth
             if sampled_tree[-1].arity is None:  # First node
                 current_depth = 0
             elif sampled_tree[-1].arity > 0:  # Previous node was a function
@@ -72,22 +68,17 @@ class TreeValidator:
                         sampled_tree[-node].children_count += 1
                         break
             
-            # Check if functions need to be closed
             if len(sampled_tree) > 1:
                 for node in range(1, len(sampled_tree)):
                     if sampled_tree[node].arity == sampled_tree[node].children_count:
                         sampled_tree[node].is_open = False
         
-        # Add current node to tree
         sampled_tree.append(TreeNode(sampled_token_index, current_depth, arity, no_children_nodes, is_open_function))
         
-        # Determine valid next nodes
         valid_nodes = self._get_valid_next_nodes(sampled_tree, sampled_token_index, remaining_tokens)
 
-        # dimensionality constraints for terminals
         valid_nodes = self._adjust_for_dimensionality(valid_nodes, dimensionality)
 
-        # Return updated probabilities
         return self._calculate_probability_table(output_tokens, valid_nodes), sampled_tree
     
     def _get_valid_next_nodes(self, sampled_tree: List, sampled_token_index: Optional[int], remaining_tokens: Optional[int] = None) -> List[int]:
@@ -100,7 +91,6 @@ class TreeValidator:
                     all_functions_closed = False
                     break
             if all_functions_closed:
-                # Only allow end flag
                 return [len(self.vocab_arity_dict) - 1]  # Assuming end token is last
         
         # Count outstanding open slots (children still needed to complete the tree)
@@ -111,13 +101,10 @@ class TreeValidator:
                 if sampled_tree[node].is_open is True:
                     outstanding += sampled_tree[node].arity - sampled_tree[node].children_count
         
-        # If remaining tokens can't accommodate new functions, force terminals only
-        # A new function (arity=2) adds 1 more outstanding slot, so we need
-        # remaining_tokens >= outstanding + 1 to allow functions
+        # Only terminals once the remaining tokens are just enough to close the tree.
         if remaining_tokens is not None and remaining_tokens <= outstanding:
             return self._get_terminal_keys()
         
-        # Determine depth of next node
         if sampled_token_index in self._get_function_keys():
             depth_next_node = sampled_tree[-1].depth + 1
         elif sampled_token_index in self._get_terminal_keys():
@@ -130,13 +117,10 @@ class TreeValidator:
         
         # Apply depth restrictions (max depth per Koza)
         if depth_next_node < MAX_TREE_DEPTH:
-            # Allow functions and terminals
             return self._get_function_keys() + self._get_terminal_keys()
         elif depth_next_node == MAX_TREE_DEPTH:
-            # Only allow terminals
             return self._get_terminal_keys()
         else:
-            # Invalid depth
             return []
     
     def _get_function_keys(self) -> List[int]:
@@ -158,7 +142,6 @@ class TreeValidator:
         
         return new_prob_table
     
-    # New method added. Was not part of the "TSGP for d-dim" Paper.
     def _adjust_for_dimensionality(self, valid_nodes: List[int], dimensionality: int) -> List[int]:
         """Adjust valid nodes based on dimensionality constraints."""
         adjusted_valid_nodes = []

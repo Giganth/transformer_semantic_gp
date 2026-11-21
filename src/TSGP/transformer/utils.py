@@ -1,4 +1,3 @@
-# src/TSGP/transformer/utils.py
 """Utility functions for Transformer model."""
 
 import tensorflow as tf
@@ -34,13 +33,10 @@ def generate_vocab(functions: List[str], variables: List[str], ephemerals: List[
     vocab.append("")        # Index 0 - padding token
     vocab.append("[UNK]")   # Index 1 - unknown/out-of-vocabulary token
     
-    # Add functions
     vocab.extend(functions)
     
-    # Add variables
     vocab.extend(variables)
     
-    # Add ephemeral constants (converted to strings)
     ephemeral_strs = [str(float(eph)) for eph in ephemerals]
     vocab.extend(ephemeral_strs)
     
@@ -60,10 +56,8 @@ def get_function_arity(function_name: str) -> int:
     Returns:
         Arity of the function (number of arguments it takes)
     """
-    # Binary operators
     binary_ops = ['add', 'sub', 'mul', 'div', 'pow']
     
-    # Unary operators. Not supported yet.
     unary_ops = ['sin', 'cos', 'tan', 'exp', 'log']
 
     if function_name in binary_ops:
@@ -71,7 +65,6 @@ def get_function_arity(function_name: str) -> int:
     elif function_name in unary_ops:
         return 1
     else:
-        # Default to binary for unknown functions
         return 2
 
 
@@ -90,10 +83,8 @@ def generate_vocab_arity_dict(vocab: List[str], functions: List[str]) -> Dict[in
     
     for idx, token in enumerate(vocab):
         if token in functions:
-            # Function - get its arity
             arity_dict[idx] = get_function_arity(token)
         else:
-            # Terminal (variable, constant, or special token) - arity 0
             arity_dict[idx] = 0
     
     return arity_dict
@@ -112,11 +103,9 @@ def get_terminal_keys(vocab: List[str], functions: List[str]) -> List[int]:
     """
     terminal_keys = []
     
-    # Special tokens to exclude (padding, unknown, control tokens)
     special_tokens = ["", "[UNK]", "[start]", "[end]"]
     
     for idx, token in enumerate(vocab):
-        # Exclude special tokens and functions
         if token not in functions and token not in special_tokens:
             terminal_keys.append(idx)
     
@@ -150,8 +139,7 @@ def create_vectorization(vocab_data: List[str], flags: bool = True, max_length: 
     Args:
         vocab_data: List of vocabulary tokens (should already include "", "[UNK]", "[start]", "[end]")
         flags: If True, uses decoder mode (with [start]/[end]). If False, encoder mode
-        config: Configuration dictionary containing max_length
-        max_length: Maximum sequence length (overrides config if provided)
+        max_length: Maximum sequence length (None: pad to the longest input)
         ragged: If True, creates ragged tensors (variable length sequences)
         
     Returns:
@@ -165,7 +153,6 @@ def create_vectorization(vocab_data: List[str], flags: bool = True, max_length: 
         - "[start]" and "[end]" at the end
     """
     
-    # Adjust max_length for decoder
     if flags:
         actual_max_length = max_length + 1  # +1 for [start] token
 
@@ -198,20 +185,16 @@ def prepare_transformer_config(config: dict) -> dict:
         Updated configuration dictionary with vocab, vocab_arity_dict, terminal_keys, 
         function_keys, dec_vocab, and vocab_size
     """
-    # Extract base parameters
     functions = config['functions']
     variables = config['variables']
     ephemerals = config['ephemerals']
 
-    # Generate vocabulary
     vocab = generate_vocab(functions, variables, ephemerals)
 
-    # Generate derived values
     vocab_arity_dict = generate_vocab_arity_dict(vocab, functions)
     terminal_keys = get_terminal_keys(vocab, functions)
     function_keys = get_function_keys(vocab, functions)
 
-    # Update config
     config['dec_vocab'] = vocab
     config['vocab_arity_dict'] = vocab_arity_dict
     config['terminal_keys'] = terminal_keys
@@ -222,7 +205,6 @@ def prepare_transformer_config(config: dict) -> dict:
 
 def transform_deap_ind_to_keras_string(ind):
     ind_string = str(ind)
-    # Adjust formatting to match Keras expected format.
     adjusted_string = str(ind_string).replace("(", " ").replace(")", "").replace(",", "").replace("-0.0","0.0")
     return adjusted_string
 

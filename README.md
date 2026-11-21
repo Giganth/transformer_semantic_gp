@@ -3,13 +3,14 @@
 <p align="center">
   <a href="https://github.com/Giganth/transformer_semantic_gp/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Giganth/transformer_semantic_gp/ci.yml?branch=main&amp;style=for-the-badge&amp;label=CI" alt="CI"></a>
   <a href="https://github.com/Giganth/transformer_semantic_gp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow?style=for-the-badge" alt="License"></a>
-  <a href="https://dl.acm.org/doi/10.1145/3845808"><img src="https://img.shields.io/badge/TELO-10.1145%2F3845808-blue?style=for-the-badge&amp;logo=acm&amp;logoColor=white" alt="TELO 2026"></a>
+  <a href="https://arxiv.org/abs/2611.17455"><img src="https://img.shields.io/badge/arXiv-2611.17455-b31b1b?style=for-the-badge&amp;logo=arxiv&amp;logoColor=white" alt="arXiv"></a>
 </p>
 
-Transformer Semantic Genetic Programming (TSGP) is a semantic GP approach that uses a pre-trained
-transformer model as a variation operator to generate offspring programs with high semantic similarity
-to a given parent. Unlike other semantic GP approaches that rely on fixed syntactic transformations, TSGP
-learns diverse structural variations that lead to offspring with similar semantics.
+Transformer Semantic Genetic Programming (TSGP) is a semantic GP approach that uses a
+pretrained transformer as its variation operator. The model is trained on pairs of
+semantically similar programs and proposes, for a given parent, an offspring with similar
+semantics. Unlike semantic operators built on fixed syntactic transformations, TSGP
+learns diverse structural variations.
 
 ## Contents
 
@@ -27,68 +28,46 @@ learns diverse structural variations that lead to offspring with similar semanti
 
 | Version | Paper | Novelty | Model |
 |---|---|---|---|
-| [2](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP2) | Anthes, Geiger, Briesch, and Rothlauf, 2026, [arXiv:2611.17455](https://arxiv.org/abs/2611.17455) — *TSGP-2: On the Non-Linearity of Symbolic Regression Problems and How to Exploit It with Model-based Semantic Genetic Programming* | Improved training data | `TSGP-2.weights.h5` in tag `TSGP2` |
-| [1](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP) | Anthes, Sobania, and Rothlauf, 2026, [DOI 10.1145/3845808](https://dl.acm.org/doi/10.1145/3845808) — *Transformer Semantic Genetic Programming for d-dimensional Symbolic Regression Problems* (TELO 2026) | Multi-dimensional model | `TSGP.weights.h5` in this repository; the original model of the paper runs on [figshare](https://doi.org/10.6084/m9.figshare.30601235) (activate `legacy_mode`) |
-| [1](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP) | Anthes, 2026, [DOI 10.1007/978-3-032-23005-8_4](https://doi.org/10.1007/978-3-032-23005-8_4) — *Syntactic Flexibility Enables Compact Solutions in Transformer Semantic GP* (EuroGP 2026, pp. 51–66) | Syntactical variation analysis | `TSGP.weights.h5` in this repository; the original model of the paper runs on [figshare](https://doi.org/10.6084/m9.figshare.30601235) (activate `legacy_mode`) |
+| [2](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP2) | Anthes, Geiger, Briesch, and Rothlauf, 2026, [arXiv:2611.17455](https://arxiv.org/abs/2611.17455) — *TSGP-2: On the Non-Linearity of Symbolic Regression Problems and How to Exploit It with Model-based Semantic Genetic Programming* | Improved training data | `TSGP-2.weights.h5` and `TSGP.weights.h5` in this repository |
+| [1](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP) | Anthes, Sobania, and Rothlauf, 2026, [DOI 10.1145/3845808](https://dl.acm.org/doi/10.1145/3845808) — *Transformer Semantic Genetic Programming for d-dimensional Symbolic Regression Problems* (TELO 2026) | Multi-dimensional model | `TSGP.weights.h5` in tag `TSGP`; the original model of the paper runs on [figshare](https://doi.org/10.6084/m9.figshare.30601235) (activate `legacy_mode`) |
+| [1](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP) | Anthes, 2026, [DOI 10.1007/978-3-032-23005-8_4](https://doi.org/10.1007/978-3-032-23005-8_4) — *Syntactic Flexibility Enables Compact Solutions in Transformer Semantic GP* (EuroGP 2026, pp. 51–66) | Syntactical variation analysis | `TSGP.weights.h5` in tag `TSGP`; the original model of the paper runs on [figshare](https://doi.org/10.6084/m9.figshare.30601235) (activate `legacy_mode`) |
 | – | Anthes, Sobania, and Rothlauf, 2025, [DOI 10.1145/3712256.3726412](https://dl.acm.org/doi/10.1145/3712256.3726412) — *Transformer Semantic Genetic Programming for Symbolic Regression* (GECCO 2025) | Learning semantic variations | not supported in this implementation |
 
 ## Installation
+
+Tested with Python 3.12 on Linux with an NVIDIA GPU (CUDA 12, installed through pip).
+
 ```bash
-# Create a virtual environment
 python3.12 -m venv venv
-
-# Activate (Linux/macOS)
 source venv/bin/activate
-
-# Optional: upgrade pip
-python -m pip install --upgrade pip
-
-# Install the package
-pip install -e .
+pip install -r requirements.txt
+pip install -e . --no-deps
 ```
 
-## Quick Start
+## Quick start
 
-**Standard GP:**
+One search with each operator and, for comparison, with standard GP (problem, seed and all
+settings are in the config files):
+
 ```bash
-./venv/bin/python examples/symbolic_regression.py --algorithm standard_gp
+python examples/symbolic_regression.py --config examples/transformer_gp_TSGP.yaml     # TSGP
+python examples/symbolic_regression.py --config examples/transformer_gp_TSGP-2.yaml   # TSGP-2
+python examples/symbolic_regression.py --config examples/standard_gp.yaml             # Standard GP
 ```
 
-**Transformer GP:**
-```bash
-./venv/bin/python examples/symbolic_regression.py --algorithm transformer_gp
-```
-## Key Features
+`--dataset feynman_II_13_17` runs the same configuration on another problem.
 
-- **Semantic-aware variation** using a transformer model
-- **FAISS-based similarity search** for nearest neighbor selection
-- **Pre-trained weights** for TSGP (`src/TSGP/transformer/models/TSGP.weights.h5`).
-- **Configurable experiments** via YAML files
+## Datasets
 
-## Project Structure
+`src/TSGP/symbolic_regression/datasets/` contains six example problems from PMLB (three
+Feynman, three real-world; features in the leading columns, target in the last one).
+Further problems are added by placing a CSV in the same format there and selecting it with
+`problem.dataset`. Datasets with more than 10,000 rows are subsampled
+(`problem.subsample: True`). `Semantic_Testset.csv` is a randomly generated sample of 500
+standard-normal input points on which the semantics of a program can be measured (necessary
+for training).
 
-```
-src/TSGP/
-├── algorithms/          # Variation Operators of Standard GP and Transformer GP 
-├── transformer/         # Transformer model, pretraining, and similarity search
-├── core/                # Evolutionary search (engine.py) & core functionalities
-├── symbolic_regression/ # Dataset loading, evaluation, and benchmark datasets
-└── experiments/         # Batch experiment management (initialize, run, analyze)
-
-examples/              # Example scripts and configs
-experiments_data/      # Generated archives, logs, and experiment outputs
-
-```
-
-## Requirements
-
-- Python ≥3.10, ≤3.13 (tested on 3.10)
-- TensorFlow ≥2.8 (with CUDA support)
-- FAISS, DEAP, NumPy, Pandas, scikit-learn
-
-See [`pyproject.toml`](pyproject.toml) or [`requirements.txt`](requirements.txt) for complete dependencies with exact versions.
-
-## Running Experiments
+## Running experiments
 
 📖 **[Experiments Guide](examples/EXPERIMENTS_GUIDE.md)** - Detailed instructions for:
 - Running single experiments for quick testing
@@ -96,13 +75,31 @@ See [`pyproject.toml`](pyproject.toml) or [`requirements.txt`](requirements.txt)
 - Parallel execution on clusters using taskspooler
 - Analyzing and visualizing results
 
-## Model Building
-The repository includes pre-trained transformer weights (`TSGP.weights.h5`). The training data used to train the transformer is available on [Figshare](https://doi.org/10.6084/m9.figshare.30601235). To train your own model, follow the comprehensive guide:
+30 runs (seeds 1000–1029) per problem and method:
+
+```bash
+python src/TSGP/experiments/initialize.py \
+    -f experiments_data/TSGP-2_feynman_I_34_27 \
+    -a transformer_gp \
+    -c examples/transformer_gp_TSGP-2.yaml \
+    -d feynman_I_34_27 -n 30 -r 1000
+python src/TSGP/experiments/run.py -f experiments_data/TSGP-2_feynman_I_34_27 -n 30
+python src/TSGP/experiments/analyze.py -f experiments_data/TSGP-2_feynman_I_34_27 -o results.pdf
+```
+
+Every run is seeded (`random_seed`) and reproduces bit for bit on the same hardware and
+software stack. The transformer samples tokens from probabilities computed on the GPU,
+though, and different GPUs or CUDA/TensorFlow versions round them differently. A single
+different token changes all later random draws, so runs on other hardware diverge from
+published ones within the first generations; the results over many seeds do not change.
+
+## Building your own model
+
+The repository includes the pretrained weights. To train your own model, follow the
+comprehensive guide:
 
 <p align="center">
-  <a href="misc/TSGP_Model_Building.pdf">
-    <img src="misc/model_building.png" alt="Model Building Guide" width="90%">
-  </a>
+  <img src="misc/model_building.png" alt="Model building" width="90%">
 </p>
 
 📖 **[Model Building Guide](examples/MODEL_BUILDING_GUIDE.md)** - Complete walkthrough of:
@@ -110,34 +107,36 @@ The repository includes pre-trained transformer weights (`TSGP.weights.h5`). The
 2. **Semantic Similarity Search** - Build similarity mappings between expressions
 3. **Pretraining** - Train the Transformer model on the generated data
 
-## Configuration
+## Repository structure
 
-Edit YAML files in `examples/` to customize:
-- Algorithm settings: Population size, generations, selection methods
-- Variation operators: Crossover/mutation rates, transformer semantic variation (e.g. target semantic distance)
-- Transformer architecture: Layers, attention heads, embedding dimensions
-- Dataset selection: Choose from built-in benchmarks or add custom datasets
-
-
-## Citation
-If you use this code, cite:
-
-```bibtex
-@article{anthes2026dimensional,
-  title={Transformer Semantic Genetic Programming for d-dimensional Symbolic Regression Problems},
-  author={Anthes, Philipp and Sobania, Dominik and Rothlauf, Franz},
-  journal={ACM Transactions on Evolutionary Learning and Optimization},
-  volume={1},
-  number={1},
-  year={2026},
-  doi={10.1145/3845808}
-}
+```
+src/TSGP/
+├── algorithms/           # Standard GP, Transformer GP and the archive data generator
+├── core/                 # evolutionary engine, primitive set, monitoring
+├── transformer/          # model, sampling, pretraining, similarity search, trained models
+├── symbolic_regression/  # datasets, evaluation, synthetic target functions
+├── experiments/          # batch runs: initialize.py, run.py, analyze.py
+└── config/               # defaults and YAML loader
+examples/                 # configs of both models and entry points (search, data generation, pretraining)
+misc/                     # figure used in the README
 ```
 
-The conference version is *Transformer Semantic Genetic Programming for Symbolic Regression*
-(GECCO 2025, [DOI 10.1145/3712256.3726412](https://dl.acm.org/doi/10.1145/3712256.3726412)).
+## Citation
 
-> **Note:** This repository is based on the paper *Transformer Semantic Genetic Programming for d-dimensional Symbolic Regression Problems* (Anthes, Sobania, and Rothlauf, 2026, [DOI 10.1145/3845808](https://dl.acm.org/doi/10.1145/3845808)). The codebase has been completely refactored and a new improved transformer model is trained, so results may diverge slightly from those reported in the paper. If you want to use the model used for the experiments, activate `legacy_mode` and download the model here: https://doi.org/10.6084/m9.figshare.30601235.
+If you use TSGP in your research, cite the paper of the version you use (see the table
+above). The paper of this version is:
+
+```bibtex
+@misc{anthes2026tsgp2,
+  title={TSGP-2: On the Non-Linearity of Symbolic Regression Problems and How to Exploit It with Model-based Semantic Genetic Programming},
+  author={Anthes, Philipp and Geiger, Alina and Briesch, Martin and Rothlauf, Franz},
+  year={2026},
+  eprint={2611.17455},
+  archivePrefix={arXiv},
+  primaryClass={cs.NE},
+  doi={10.48550/arXiv.2611.17455}
+}
+```
 
 TSGP is built on [DEAP](https://github.com/DEAP/deap):
 
@@ -152,3 +151,7 @@ TSGP is built on [DEAP](https://github.com/DEAP/deap):
   year    = {2012}
 }
 ```
+
+## License
+
+MIT, see [LICENSE](LICENSE).

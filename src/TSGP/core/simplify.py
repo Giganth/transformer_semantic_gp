@@ -9,6 +9,7 @@ import re
 from typing import List, Dict, Tuple, Any
 import sympy as sp
 from deap import gp
+import time
 
 class SymbolicSimplifier:
     """
@@ -18,7 +19,6 @@ class SymbolicSimplifier:
     and converts back to DEAP format while preserving numerical precision.
     """
     
-    # Mapping from SymPy operators to Deap function names
     SYMPY_TO_PREFIX = {
         sp.Add: "add",
         sp.Mul: "mul",
@@ -37,7 +37,6 @@ class SymbolicSimplifier:
         sp.tanh: "tanh",
     }
     
-    # Mapping from Deap function names to SymPy operators
     PREFIX_TO_SYMPY = {
         "add": "+",
         "mul": "*",
@@ -94,46 +93,39 @@ class SymbolicSimplifier:
         try:
             nodes, edges, labels = gp.graph(individual)
 
-            # Extract expressions from labels
             expressions = list()
             for node in range(len(labels)):
                 expressions.append(labels[node])
 
-            # Handle constant preservation
             if not evaluate_constants:
                 expressions, placeholder_dict = self._preserve_constants(expressions)
             else:
                 placeholder_dict = None
             
-            # Build SymPy-compatible function string
             function_string = self._build_function_string(nodes, edges, expressions, 0)
             
-            # Parse and simplify with SymPy
             parsed_expr = sp.parse_expr(
                 function_string, 
                 evaluate=evaluate_expression
             )
             
-            # Restore original constants if needed
             if placeholder_dict:
                 simplified_str = str(parsed_expr)
                 simplified_str = self._restore_constants(simplified_str, placeholder_dict)
                 parsed_expr = sp.parse_expr(simplified_str, evaluate=False)
             
-            # Check for invalid expressions
             if parsed_expr.has(sp.zoo) or parsed_expr.has(sp.I) or parsed_expr.has(sp.nan):
                 return individual
             
-            # Convert back to DEAP format
-            prefix_list = self._sympy_to_prefix(parsed_expr)
-            prefix_str = self._format_prefix_list(prefix_list)
-            
+            prefix_list = self.sympy_to_prefix(parsed_expr)
+            prefix_str = self.format_prefix_list(prefix_list)
             simplified_individual = gp.PrimitiveTree.from_string(prefix_str, self.pset)
-        
+
             return simplified_individual
             
-        except (ValueError, AttributeError, SyntaxError, ZeroDivisionError, TypeError):
-            # Return original if simplification fails
+        except (ValueError, AttributeError, SyntaxError, ZeroDivisionError, TypeError,
+                RecursionError, OverflowError):
+            # RecursionError comes from SymPy looping on towers of symbolic exponents.
             return individual
     
     def _preserve_constants(
@@ -151,19 +143,16 @@ class SymbolicSimplifier:
         """
         constants_to_optimize = {-1.0, -0.0, 0.0, 1.0}
         
-        # Extract float values to preserve
         float_values = [
             item for item in expressions 
             if isinstance(item, float) and item not in constants_to_optimize
         ]
         
-        # Create placeholder mapping
         placeholder_dict = {
             f'c_{i+1}': float_values[i] 
             for i in range(len(float_values))
         }
         
-        # Replace floats with placeholders
         modified_expressions = []
         for item in expressions:
             if isinstance(item, float) and item not in constants_to_optimize:
@@ -215,23 +204,19 @@ class SymbolicSimplifier:
         Returns:
             String representation of the expression tree
         """
-        # Find children of current node
         next_nodes = [
             edge[1] for edge in edges 
             if edge[0] == current_node
         ]
         
-        # Terminal node (leaf)
         if not next_nodes:
             return str(expressions[current_node])
         
-        # Unary operator
         if len(next_nodes) == 1:
             op_symbol = self._get_operation_symbol(expressions[current_node])
             child_expr = self._build_function_string(nodes, edges, expressions, next_nodes[0])
             return f"({op_symbol}({child_expr}))"
         
-        # Binary operator
         left_expr = self._build_function_string(nodes, edges, expressions, next_nodes[0])
         right_expr = self._build_function_string(nodes, edges, expressions, next_nodes[1])
         op_symbol = self._get_operation_symbol(expressions[current_node])
@@ -255,7 +240,7 @@ class SymbolicSimplifier:
             raise ValueError(f"Unsupported operation: '{op}'")
         return self.PREFIX_TO_SYMPY[op]
     
-    def _sympy_to_prefix(self, expr: sp.Basic) -> List[str]:
+    def sympy_to_prefix(self, expr: sp.Basic) -> List[str]:
         """
         Convert SymPy expression to prefix notation.
         
@@ -265,7 +250,6 @@ class SymbolicSimplifier:
         Returns:
             List of tokens in prefix notation
         """
-        # Symbols and constants
         if isinstance(expr, sp.Symbol):
             return [str(expr)]
         elif isinstance(expr, sp.Integer):
@@ -283,14 +267,12 @@ class SymbolicSimplifier:
         if (isinstance(expr, sp.Pow) and 
             isinstance(expr.args[1], sp.Rational) and
             expr.args[1].p == 1 and expr.args[1].q == 2):
-            return ["sqrt"] + self._sympy_to_prefix(expr.args[0])
+            return ["sqrt"] + self.sympy_to_prefix(expr.args[0])
         
-        # SymPy operators
         for op_type, op_name in self.SYMPY_TO_PREFIX.items():
             if isinstance(expr, op_type):
                 return self._parse_sympy_operator(op_name, expr)
         
-        # Unknown operator
         raise ValueError(f"Unknown SymPy operator: {expr}")
     
     def _parse_sympy_operator(self, op_name: str, expr: sp.Basic) -> List[str]:
@@ -306,7 +288,6 @@ class SymbolicSimplifier:
         """
         n_args = len(expr.args)
         
-        # Validate argument count
         if op_name in ["add", "mul"]:
             if n_args < 2:
                 raise ValueError(f"{op_name} requires at least 2 arguments, got {n_args}")
@@ -314,16 +295,15 @@ class SymbolicSimplifier:
             if not (1 <= n_args <= 2):
                 raise ValueError(f"{op_name} requires 1-2 arguments, got {n_args}")
         
-        # Build prefix list
         parse_list = []
         for i in range(n_args):
             if i == 0 or i < n_args - 1:
                 parse_list.append(op_name)
-            parse_list.extend(self._sympy_to_prefix(expr.args[i]))
+            parse_list.extend(self.sympy_to_prefix(expr.args[i]))
         
         return parse_list
     
-    def _format_prefix_list(self, prefix_list: List[Any]) -> str:
+    def format_prefix_list(self, prefix_list: List[Any]) -> str:
         """
         Format prefix list to DEAP-compatible string.
         

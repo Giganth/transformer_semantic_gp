@@ -3,8 +3,8 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "TSGP"
-version = "1.0.0"
+name = "TSGP-2"
+version = "2.0.0"
 description = "Transformer Semantic Genetic Programming for Symbolic Regression"
 readme = "README.md"
 requires-python = ">=3.10,<=3.13"

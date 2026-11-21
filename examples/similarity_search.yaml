@@ -1,16 +1,20 @@
-# Transformer model configuration
+# Similarity search configuration
 model:
 
   # Settings for similarity search
   'max_length'                       : 100    # max length of expressions in tokens
-  'similarity_threshold'             : 100    # 100 is default value, lower -> more similar (sqrt(similarity_threshold) == Euclidean Distance)
-  'nlist'                            : 5000   # amt. of clusters -> higher nlist -> faster search but lower accuracy and indexing takes longer
-  'nprobe'                           : 10    # amt. of clusters to be searched -> higher nprobe -> higher accuracy, but increased search duration
+  'similarity_threshold'             : 100    # largest Euclidean distance between the semantics of a pair
   'n_neighbors'                      : 3     # amt. of neighbors to retrieve from similarity search, 3 default
                 
 
+  # One directory per corpus and dimensionality; the pairs are written next to each
+  # archive file as similar_pairs_<seed>.pkl.
   archive_directories:
-    # - 'trainingdata/Archive_2'  # 2D problems
-    # - 'trainingdata/Archive_3'  # 3D problems
-    # - 'trainingdata/Archive_4'  # 4D problems
-    - 'experiments_data/GP_Archive_5'  # 5D problems
+    - 'experiments_data/GP_Archive_2_TSGP'
+    - 'experiments_data/GP_Archive_3_TSGP'
+    - 'experiments_data/GP_Archive_4_TSGP'
+    - 'experiments_data/GP_Archive_5_TSGP'
+    - 'experiments_data/GP_Archive_2_TSGP-2'
+    - 'experiments_data/GP_Archive_3_TSGP-2'
+    - 'experiments_data/GP_Archive_4_TSGP-2'
+    - 'experiments_data/GP_Archive_5_TSGP-2'

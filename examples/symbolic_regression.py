@@ -7,8 +7,7 @@ def main():
     parser.add_argument(
         "--algorithm", 
         choices=["standard_gp", "transformer_gp"],
-        default="transformer_gp",
-        help="Which algorithm to use"
+        help="Which algorithm to use (default: the config's algorithm, else transformer_gp)"
     )
     parser.add_argument(
         "--config",
@@ -22,13 +21,19 @@ def main():
     )
     args = parser.parse_args()
 
-    # Load configuration (merges defaults with user config if provided)
+    # The defaults depend on the algorithm, so it has to be known before the config is merged.
+    algorithm = args.algorithm
+    if algorithm is None and args.config:
+        algorithm = ConfigLoader._load_yaml(args.config).get('algorithm')
+    algorithm = algorithm or "transformer_gp"
+
     config = ConfigLoader.load(
         config_path=args.config,
-        algorithm=args.algorithm
+        algorithm=algorithm
     )
-    
-    # Run the appropriate algorithm
+    if args.dataset:
+        config['problem']['dataset'] = args.dataset
+
     if config['algorithm'] == "standard_gp":
         print(f"Running Standard GP on {config['problem']['dataset']}...")
         from TSGP.algorithms.standard_gp import StandardGP
@@ -43,10 +48,8 @@ def main():
     else:
         raise ValueError(f"Unknown algorithm: {config['algorithm']}")
 
-    # Execute the search
     best_solution = algorithm.run()
     
-    # Display results
     print(f"\nBest solution found for {config['problem']['dataset']}: {best_solution}")
     print(f"Expression: {str(best_solution)}")
     print(f"Training RMSE: {best_solution.fitness.values[0]:.6f}")

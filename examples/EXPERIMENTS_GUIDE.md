@@ -1,125 +1,72 @@
-# TSGP Framework - Usage Guide
+# Running Experiments
 
-## Two Modes of Operation
+## Single run
 
-### Mode 1: Single Run (Quick Testing)
-
-For quick testing and development, use the `symbolic_regression.py` script:
+`symbolic_regression.py` runs one search with the settings of a config file:
 
 ```bash
-# Run with minimal Settings
-./venv/bin/python  examples/symbolic_regression.py --config examples/minimal_settings.yaml
+python examples/symbolic_regression.py --config examples/transformer_gp_TSGP.yaml     # TSGP
+python examples/symbolic_regression.py --config examples/transformer_gp_TSGP-2.yaml   # TSGP-2
+python examples/symbolic_regression.py --config examples/standard_gp.yaml             # Standard GP
 
-# Run standard GP
-./venv/bin/python examples/symbolic_regression.py --algorithm standard_gp
-
-# Run transformer GP
-./venv/bin/python examples/symbolic_regression.py --algorithm transformer_gp
-
-# Use custom config
-./venv/bin/python examples/symbolic_regression.py --config examples/standard_gp.yaml
-
-# Use custom config
-./venv/bin/python examples/symbolic_regression.py --config examples/transformer_gp.yaml
-
-# Specify dataset
-./venv/bin/python examples/symbolic_regression.py --algorithm transformer_gp --dataset feynman_I_27_6
+# Same configuration on another problem
+python examples/symbolic_regression.py --config examples/standard_gp.yaml --dataset feynman_II_13_17
 ```
 
-### Mode 2: Multiple Experimental Runs
+Problems are the CSV files in `src/TSGP/symbolic_regression/datasets/`, named without
+the extension. The monitor CSV is written to `experiments_data/logs/`.
 
-#### Step 1: Initialize Experiments
+## Batch runs (as in the paper)
 
-Creates experiment folder with configuration files for n independent runs.
+### Step 1: Initialize
+
+`initialize.py` writes one config per run into an experiment folder. Run `i` uses seed
+`r + i`.
 
 ```bash
-# Initialize 30 runs of TSGP (30 runs)
-./venv/bin/python src/TSGP/experiments/initialize.py \
-    -f experiments_data/TSGP_1_feynman_I_43_43  \
+python src/TSGP/experiments/initialize.py \
+    -f experiments_data/TSGP_feynman_I_34_27 \
     -a transformer_gp \
-    -d feynman_I_43_43  \
+    -c examples/transformer_gp_TSGP.yaml \
+    -d feynman_I_34_27 \
     -n 30 \
-    -r 1000 \
-    -c examples/transformer_gp.yaml
-
-
-**Arguments:**
-- `-f, --folder_name`: Output folder for experiment files
-- `-a, --algorithm`: `standard_gp` or `transformer_gp`
-- `-d, --dataset`: Dataset name (see `src/TSGP/symbolic_regression/datasets/`)
-- `-n, --num_runs`: Number of independent runs
-- `-r, --random_seed_start`: Starting seed (run i uses seed r+i)
-- `-c, --config`: Base config file (optional)
-```
-**Output:** Creates folder with `run_0.yaml`, `run_1.yaml`, ..., `run_N.yaml`
-
-#### Step 2: Execute Runs
-
-**Single machine:**
-```bash
-# Execute all runs
-./venv/bin/python src/TSGP/experiments/run.py \
-    -f experiments_data/test_tsgp \
-    -n 10
-
-# Execute subset of runs
-./venv/bin/python src/TSGP/experiments/run.py \
-    -f experiments_data/test_tsgp \
-    -n 5
+    -r 1000
 ```
 
-**Parallel execution (recommended):**
+- `-f`: experiment folder
+- `-a`: `standard_gp` or `transformer_gp`
+- `-c`: base config
+- `-d`: problem
+- `-n`: number of runs
+- `-r`: first seed
 
-Using taskspooler (tsp) for parallel execution:
+Repeat it for the other problems and the other two operators
+(`examples/standard_gp.yaml`, `examples/transformer_gp_TSGP-2.yaml`).
+
+### Step 2: Execute
+
 ```bash
-# Queue 30 parallel workers (each executes 1 run)
-for i in {1..30}; do 
-    tsp ./venv/bin/python src/TSGP/experiments/run.py \
-        -f experiments_data/TSGP_1_feynman_I_43_43 \
-        -n 1
+# Execute 30 runs of one folder in sequence
+python src/TSGP/experiments/run.py -f experiments_data/TSGP_feynman_I_34_27 -n 30
+```
+
+The runner takes a lock file per run. Several runners can therefore work on the same
+folder in parallel, and each picks the next run nobody has started. With
+[task spooler](https://viric.name/soft/ts/):
+
+```bash
+for i in {1..30}; do
+    tsp python src/TSGP/experiments/run.py -f experiments_data/TSGP_feynman_I_34_27 -n 1
 done
-
-# Set max parallel jobs (default: 1)
-tsp -S 3  # Run 3 jobs simultaneously
-
-# Monitor queue
-tsp        # List all jobs
-tsp -t 0   # Show output of job ID 0
-tsp -C     # Clear finished jobs
-tsp -r     # removes last job from queue
+tsp -S 3   # number of jobs running at the same time
 ```
 
-The runner script uses lock files to prevent conflicts - multiple runners can safely execute runs from the same folder.
+Each run writes `monitor_run_<seed>.csv`, with one row per generation, into the folder.
 
-#### Step 3: Analyze Results
+### Step 3: Analyze
 
-After runs complete, analyze and visualize results:
+`analyze.py` aggregates the monitor logs of a folder into a PDF:
 
 ```bash
-# Analyze single experiment
-./venv/bin/python src/TSGP/experiments/analyze.py \
-    -f experiments_data/StdGP_feynman_I_43_43 \
-    -o experiments_data/results/StdGP_feynman_I_43_43.pdf \
-    --title "StdGP on Feynman I 43 43"
-
-# Compare multiple experiments
-./venv/bin/python src/TSGP/experiments/analyze.py \
-    -f experiments_data/StdGP_feynman_I_43_43  \
-    experiments_data/TSGP_01_feynman_I_43_43 \
-    experiments_data/TSGP_1_feynman_I_43_43 \
-    -n "Standard GP" "TSGP 01" "TSGP 1" \
-    -o experiments_data/results/comparison_feynman_I_43_43.pdf \
-    --title "GP vs TSGP on feynman_I_43_43 "
+python src/TSGP/experiments/analyze.py -f experiments_data/TSGP_feynman_I_34_27 -o results.pdf
 ```
-
-**Arguments:**
-- `-f, --folders`: One or more experiment folders to analyze
-- `-n, --names`: Optional names for each experiment (for legend)
-- `-o, --output`: Output PDF file path
-- `--title`: Main title for the plots
-
-**Output:**
-- PDF with plots showing median/quartiles across runs
-- Console output with final generation statistics (median fitness, test fitness, size, runtime)
-
-

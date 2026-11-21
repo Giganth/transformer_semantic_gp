@@ -19,7 +19,6 @@ class ConfigLoader:
         Returns:
             Configuration dictionary
         """
-        # Start with algorithm-specific defaults
         if algorithm == 'transformer_gp':
             config = cls._get_transformer_defaults()
         elif algorithm == 'standard_gp':
@@ -33,12 +32,10 @@ class ConfigLoader:
         sr_defaults = cls._get_symbolic_regression_defaults()
         config = cls._deep_update(sr_defaults, config)
 
-        # Merge with user configuration if provided
         if config_path and os.path.exists(config_path):
             user_config = cls._load_yaml(config_path)
             config = cls._deep_update(config, user_config)
         
-        # Add metadata
         config['metadata'] = {
             'version': __version__,
             'created_at': str(datetime.now()),

@@ -9,7 +9,7 @@ popsize: 100
 
 # Initialization settings
 initialization:
-  mode: ramped-half-and-half  # Options: 'grow', 'full', 'ramped-half-and-half'
+  mode: ramped-half-and-half
   min_tree_depth: 2
   max_tree_depth: 5
 
@@ -27,7 +27,7 @@ variation:
     node_bias_terminals: 0.1  # Bias towards selecting terminal nodes
   mutation:
     application_prob: 0.1  # Probability of applying mutation
-    mode: 'ramped-half-and-half'  # Options: 'grow', 'full','ramped-half-and-half'
+    mode: 'ramped-half-and-half'
     min_tree_depth: 0
     max_tree_depth: 2
 
@@ -37,7 +37,7 @@ termination:
 
 # Problem-specific settings
 problem:
-  dataset: feynman_I_43_43  # Dataset name
+  dataset: feynman_I_34_27  # Dataset name
   functions: ['add', 'sub', 'mul', 'div', 'pow']  # Available functions
   ephemerals: [-0.5, 0.5]  # Range for ephemeral constants
   test_split_ratio: 0.25  # Train/test split (default 0.25)

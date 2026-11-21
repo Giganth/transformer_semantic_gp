@@ -10,7 +10,7 @@ import tensorflow as tf
 import numpy as np
 from keras.callbacks import ModelCheckpoint
 import tensorflow.data as tf_data
-
+import time
 from .model import TransformerModel
 from .utils import create_vectorization, generate_vocab
 
@@ -28,28 +28,25 @@ class TransformerPretrainer:
         self.config = config
         self.pretraining_config = config["model"]
         
-        # Setup random seeds
         self._setup_random_seeds()
         
-        # Setup GPU configuration
         self._setup_gpu()
         
-        # Extract pretraining parameters
         self.model_directory = self.pretraining_config['model_directory']
         self.max_epochs = self.pretraining_config["max_epochs"]
         self.batch_size = self.pretraining_config["batch_size"]
         self.learning_rate = self.pretraining_config["learning_rate"]
         self.val_split_ratio = self.pretraining_config["val_split_ratio"]
         self.similarity_threshold = self.pretraining_config["similarity_threshold"]
-        self.max_samples_per_file = self.pretraining_config["max_samples_per_file"]
+        self.max_samples_per_archive = self.pretraining_config["max_samples_per_archive"]
         self.max_length = self.pretraining_config["max_length"]
         
-        # Feature flags
         self.include_distance = self.pretraining_config["include_semantic_distance"]
         self.include_amt_variables = self.pretraining_config["include_dimensionality"]
         
-        # Data paths
-        self.archive_directories = self.pretraining_config['archive_directories']
+        self.train_data_path = self.pretraining_config['train_data_path']
+        self.test_data_path = self.pretraining_config['test_data_path']
+        self.test_split_ratio = self.pretraining_config['test_split_ratio']
         
         print("=" * 50)
         print("Transformer Pretraining Initialized")
@@ -82,7 +79,6 @@ class TransformerPretrainer:
             for gpu in gpus:
                 tf.config.experimental.set_memory_growth(gpu, True)
         
-        # Suppress TensorFlow warnings
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
     
     def load_training_data(self) -> List[Tuple[str, str, List[float]]]:
@@ -93,72 +89,85 @@ class TransformerPretrainer:
             List of (encoder_string, decoder_string, additional_inputs) tuples
         """
         text_pairs = []
+        test_pairs = []
+        from tqdm import tqdm  # Ensure tqdm is imported if used
 
-        # Get archive directories from config
         archive_dirs = self.config['model']['archive_directories']
-        
-        for i, archive_dir in enumerate(archive_dirs):
+
+        for archive_dir in archive_dirs:
             print(f"\n Processing directory: {archive_dir}")
-            
-            # Find all pickle files in directory
-            input_paths = glob.glob(os.path.join(archive_dir, "**/*similar_pairs.pkl"), recursive=True)
+            amt_variables = None
+            if self.include_amt_variables:
+                match = re.search(r'Archive_(\d+)', archive_dir)
+                if match:
+                    amt_variables = int(match.group(1))
+                    print(f"Detected functions valid for {amt_variables}-dimensional problems")
+
+            # Only similar_pairs_<seed>.pkl, as written by the similarity search; other
+            # files in the directory are ignored.
+            input_paths = sorted(
+                path for path in glob.glob(os.path.join(archive_dir, "**", "similar_pairs_*.pkl"), recursive=True)
+                if re.fullmatch(r"similar_pairs_\d+\.pkl", os.path.basename(path))
+            )
             print(f"Found {len(input_paths)} archive file(s)")
-            
+
+            # Deduplicated per directory (i.e. per dimensionality).
+            archive_samples = set()
+            target_runs_counter = 0
             for file_path in input_paths:
-                print(f"Loading: {file_path}")
-                
                 try:
                     with open(file_path, 'rb') as f:
                         data = pickle.load(f)
-                    
-                    print(f"  Loaded {len(data)} samples")
-                    random.shuffle(data)
-                    
-                    # Extract dimensionality from path if needed
-                    amt_variables = None
-                    if self.include_amt_variables:
-                        match = re.search(r'Archive_(\d+)', file_path)
-                        if match:
-                            amt_variables = int(match.group(1))
-                            print(f"Detected functions valid for {amt_variables}-dimensional problems")
-                    
-                    # Process samples
-                    samples_added = 0
-                    for ind in data:
-                        if samples_added >= self.max_samples_per_file:
-                            break
-                        
-                        string_encoder = ind[0]
-                        string_decoder = ind[1]
-                        distance = ind[2]
-                        
-                        # Skip if distance exceeds threshold
-                        if distance >= self.similarity_threshold:
-                            continue
-                        
-                        # Prepare strings for tokenization
-                        adjusted_encoder = str(string_encoder).replace("(", " ").replace(")", "").replace(",", "").replace("-0.0", "0.0")
-                        adjusted_decoder = str(string_decoder).replace("(", " ").replace(")", "").replace(",", "").replace("-0.0", "0.0")
-                        
-                        # Build additional inputs
-                        additional_inputs = []
-                        if self.include_distance:
-                            additional_inputs.append(distance)
-                        if self.include_amt_variables and amt_variables is not None:
-                            additional_inputs.append(amt_variables)
 
-                        # Add flags to decoder
-                        adjusted_decoder = "[start] " + adjusted_decoder + " [end]"
-                        
-                        text_pairs.append((adjusted_encoder, adjusted_decoder, additional_inputs))
-                        samples_added += 1
-                    
-                    print(f"  Added {samples_added} samples (total: {len(text_pairs)})")
-                    
+                    archive_samples.update(data)
+                    target_runs_counter += 1
+
+                    print(f"  Loaded Archive {target_runs_counter} with {len(data)} samples")
                 except Exception as e:
-                    print(f"  Error loading {file_path}: {e}")
+                    print(f"  Failed to load {file_path}: {e}")
+
+            # Sorted before the shuffle, so the seed fixes the order (set order varies).
+            shuffled_data = sorted(archive_samples)
+            random.shuffle(shuffled_data)
+
+            # Cap applies PER archive directory
+            max_test_samples = round(self.test_split_ratio * self.max_samples_per_archive)
+            samples_added = 0
+            test_added = 0
+            for ind in tqdm(shuffled_data, desc=f"Processing {os.path.basename(os.path.normpath(archive_dir))}"):
+                if samples_added >= self.max_samples_per_archive and test_added >= max_test_samples:
+                    break
+
+                string_encoder = ind[0]
+                string_decoder = ind[1]
+                distance = ind[2]
+
+                if distance >= self.similarity_threshold:
                     continue
-        return text_pairs
+
+                adjusted_encoder = str(string_encoder).replace("(", " ").replace(")", "").replace(",", "").replace("-0.0", "0.0")
+                adjusted_decoder = str(string_decoder).replace("(", " ").replace(")", "").replace(",", "").replace("-0.0", "0.0")
+
+                additional_inputs = []
+                if self.include_distance:
+                    additional_inputs.append(distance)
+                if self.include_amt_variables and amt_variables is not None:
+                    additional_inputs.append(amt_variables)
+
+                adjusted_decoder = "[start] " + adjusted_decoder + " [end]"
+
+                # Pairs beyond the training cap go to the test set.
+                if samples_added < self.max_samples_per_archive:
+                    text_pairs.append((adjusted_encoder, adjusted_decoder, additional_inputs))
+                    samples_added += 1
+                else:
+                    test_pairs.append((adjusted_encoder, adjusted_decoder, additional_inputs))
+                    test_added += 1
+
+            print(f"  Added {samples_added} samples from {archive_dir} (total: {len(text_pairs)})")
+            print(f"  Held back {test_added} test samples (total: {len(test_pairs)})")
+
+        return text_pairs, test_pairs
     
     def prepare_datasets(self, text_pairs: List[Tuple[str, str, List[float]]]):
         """
@@ -170,10 +179,8 @@ class TransformerPretrainer:
         Returns:
             Tuple of (train_dataset, val_dataset, encoder_vectorization, decoder_vectorization, vocab_size)
         """
-        # Shuffle data
         random.shuffle(text_pairs)
         
-        # Train-val split
         num_val_samples = int(self.val_split_ratio * len(text_pairs))
         num_train_samples = len(text_pairs) - num_val_samples
         
@@ -184,8 +191,6 @@ class TransformerPretrainer:
         print(f"{len(train_pairs)} training pairs")
         print(f"{len(val_pairs)} validation pairs")
         
-        # Create vectorization layers
-        # Extract vocabulary components from config
         functions = self.pretraining_config['functions']
         variables = self.pretraining_config['variables']
         ephemerals = self.pretraining_config['ephemerals']
@@ -203,7 +208,6 @@ class TransformerPretrainer:
             max_length=self.max_length
         )
         
-        # Get vocabulary
         dec_vocab = decoder_vectorization.get_vocabulary()
         vocab_size = len(dec_vocab)
         
@@ -211,7 +215,6 @@ class TransformerPretrainer:
         print(f"Encoder vocab: {encoder_vectorization.get_vocabulary()[:10]}...")
         print(f"Decoder vocab: {dec_vocab[:10]}...")
         
-        # Create datasets
         def make_dataset(pairs):
             enc_texts, dec_texts, additional_inputs = zip(*pairs)
             enc_texts = list(enc_texts)
@@ -256,7 +259,6 @@ class TransformerPretrainer:
         Returns:
             Training history
         """
-        # Build transformer configuration
         transformer_config = {
             'max_length': self.max_length,
             'vocab_size': vocab_size,
@@ -268,14 +270,11 @@ class TransformerPretrainer:
             'learning_rate': self.learning_rate,
             'include_semantic_distance': self.include_distance,
             'include_dimensionality': self.include_amt_variables,
-            'legacy_mode': self.pretraining_config['legacy_mode'],
             'decay_steps': self.pretraining_config['decay_steps'],
         }
         
-        # Create model
         transformer_model = TransformerModel(transformer_config)
         
-        # Setup callbacks
         callbacks = []
           
         mc = ModelCheckpoint(
@@ -288,7 +287,6 @@ class TransformerPretrainer:
         )
         callbacks.append(mc)
         
-        # Try loading existing weights
         try:
             transformer_model.model.load_weights(self.model_directory)
             print(f"\nLoaded existing model from {self.model_directory}")
@@ -297,8 +295,8 @@ class TransformerPretrainer:
             print(f"\nNo existing model found at {self.model_directory} ({e})")
             print("Training new model from scratch...")
         
+        transformer_model.model.summary()
         
-        # Train
         print(f"\nStarting training for up to {self.max_epochs} epochs...")
         history = transformer_model.model.fit(
             train_ds,
@@ -316,19 +314,22 @@ class TransformerPretrainer:
         print("STARTING TRANSFORMER PRETRAINING")
         print("=" * 50)
         
-        # Load data
         print("\nStep 1: Loading training data...")
-        text_pairs = self.load_training_data()
+        text_pairs, test_pairs = self.load_training_data()
         
         print(f"\nTotal training samples loaded: {len(text_pairs)}")
         if len(text_pairs) == 0:
             raise ValueError("No training data loaded! Check archive directories.")
+
+        for path, pairs in ((self.train_data_path, text_pairs), (self.test_data_path, test_pairs)):
+            os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
+            with open(path, 'wb') as f:
+                pickle.dump(pairs, f)
+            print(f"Stored {len(pairs)} pairs in {path}")
         
-        # Prepare datasets
         print("\nStep 2: Preparing datasets...")
         train_ds, val_ds, vocab_size = self.prepare_datasets(text_pairs)
         
-        # Show sample
         print("\nSample batch:")
         for inputs, targets in train_ds.take(5):
             print(f"  Encoder inputs shape: {inputs['encoder_inputs'].shape}")
@@ -338,14 +339,13 @@ class TransformerPretrainer:
             print(f"  First encoder input: {inputs['encoder_inputs'][0][:20]}...")
             print(f"  First float input: {inputs['float_inputs'][0]}")
         
-        # Train
         print("\nStep 3: Training model...")
         history = self.train(train_ds, val_ds, vocab_size)
         
-        # Save history
+        model_stem = os.path.splitext(os.path.basename(self.model_directory))[0]
         history_path = os.path.join(
             os.path.dirname(self.model_directory),
-            'training_history.csv'
+            f'{model_stem}_history.csv'
         )
         os.makedirs(os.path.dirname(history_path), exist_ok=True)
         

@@ -6,7 +6,7 @@ Example script to run the Data Generator algorithm.
 It is recommended to initialize an experiment using the initialize.py script to create multiple Data Archives.
 
 Example usage:
-    python examples/run_data_generator.py --config examples/data_generator.yaml
+    python examples/run_data_generator.py --config examples/data_generator_TSGP-2.yaml
 """
 
 import argparse
@@ -20,7 +20,7 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default="examples/data_generator.yaml",
+        default="examples/data_generator_TSGP-2.yaml",
         help="Path to data generator configuration file"
     )
     

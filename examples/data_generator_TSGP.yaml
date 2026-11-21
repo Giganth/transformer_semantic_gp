@@ -1,0 +1,83 @@
+# Data generation for the TSGP corpus: GP runs on random target functions whose programs
+# are archived as training material. Set data_generator.num_features to 2, 3, 4 and 5
+# for the four archives (see examples/MODEL_BUILDING_GUIDE.md).
+
+# Algorithm type
+algorithm: data_generator
+
+# Population size
+popsize: 2000
+
+# Initialization settings
+initialization:
+  mode: ramped-half-and-half
+  min_tree_depth: 2
+  max_tree_depth: 5
+
+# Selection settings
+selection:
+  type: double_tournament  # Options: 'tournament', 'double_tournament'
+  tournament_size: 5
+  parsimony_size: 1.2  # Only used for double tournament
+  fitness_first: True  # Only used for double tournament
+
+# Variation operators
+variation:
+  crossover:
+    application_prob: 0.9  # Probability of applying crossover
+    node_bias_terminals: 0.1  # Bias towards selecting terminal nodes
+  mutation:
+    application_prob: 0.1  # Probability of applying mutation
+    mode: 'ramped-half-and-half'
+    min_tree_depth: 0
+    max_tree_depth: 2
+ 
+# Termination conditions
+termination:
+  max_generations: 300
+
+# Problem-specific settings
+problem:
+  dataset: feynman_I_8_14  # names the monitor file only; the data generator draws its own targets
+  functions: ['add', 'sub', 'mul', 'div','pow']  # Available functions
+  ephemerals: [-0.5, 0.5]  # Range for ephemeral constants
+  test_split_ratio: 0.25  # Train/test split (default 0.25)
+  error_metric: RMSE  # Error metric
+  standardization: True  # Whether to standardize data
+  load_semantic_testset: True  # the archive stores every program's output on the semantic testset
+
+data_generator:
+  dataset_generation: random_function_target  # 'random_function_target' (used here) or 'make_regression'
+  num_samples_dataset: 1000 # Number of samples in the synthetic dataset which is used for the GP-Search
+  num_features: 5 # Number of features in the synthetic dataset
+  functions: ['add', 'sub', 'mul', 'div']  # Available operators for random function generation
+  ephemerals: [0, 1]  # Range for ephemeral constants (will be expanded to list with step 0.1)
+  ephemeral_stepsize: 0.1  # Step size for ephemeral constants
+  noise_level: 0.1 # Standard deviation of Gaussian noise added to the target
+  num_samples_archive: 100000 # Number of samples to generate for the data archive
+  archive_folder: trainingdata/
+  simplification: True
+
+  # Options of the synthetic problem generator
+  nl: 1.0  # Node level factor for position sampling (1.0 = uniform, >1.0 = deeper trees, <1.0 = shallower trees)
+
+  # Operator weights: control how likely each operator is to be selected
+  # (this alone drives the unary vs binary split and the choice within each)
+  operator_weights:
+    add: 1.0
+    sub: 0.0
+    mul: 0.0
+    div: 0.0
+    pow: 0.0
+    sin: 0.0
+    cos: 0.0
+
+# Reproducibility
+random_seed: 1000
+
+# Parallelization for Evaluation
+num_cores: 10
+
+# Logging
+console_out: True
+monitor_folder: experiments_data/logs/

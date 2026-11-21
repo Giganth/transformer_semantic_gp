@@ -1,138 +1,63 @@
-# Transformer Model Building Guide
+# Building the Transformer Models
 
-This guide walks you through the complete process of building a pretrained Transformer model for Transformer Semantic Genetic Programming (TSGP). The process consists of three main steps:
+Both models are trained in the same three steps. They differ only in the target
+functions of step 1:
 
-1. **Data Generation** - Generate training data using evolutionary search
-2. **Semantic Similarity Search** - Build similarity mappings between expressions
-3. **Pretraining** - Train the Transformer model on the generated data
+| Model | Corpus | Data generation | Pretraining |
+|---|---|---|---|
+| TSGP | additive targets | `data_generator_TSGP.yaml` | `pretraining_TSGP.yaml` |
+| TSGP-2 | add, sub, mul, div, sin, sqrt | `data_generator_TSGP-2.yaml` | `pretraining_TSGP-2.yaml` |
 
----
+Steps 1 and 2 produce the training and test pairs
+(`trainingdata/{train,test}_pairs_*.pkl.zip`). With them you can go straight to step 3.
 
-## Step 1: Data Generation
+## Step 1: Archives from GP runs
 
-The first step is to generate training data by running evolutionary algorithms that produce simplified symbolic expressions along with their semantic vectors. This data will be used to train the Transformer model.
+Each archive run draws a random target function, runs GP on it, and archives the
+simplified programs together with their outputs on the semantic testset. The paper uses
+100 runs (seeds 1000–1099) per corpus and number of variables d = 2, 3, 4, 5.
 
-### 1.1 Configure Data Generation
-
-Create or modify your data generation configuration file (e.g., `examples/data_generator.yaml`).
-
-Note that "num_features" controls the dimensionality.
-
-### 1.2 Initialize Multiple Runs
-
-Use the `initialize.py` script to create multiple experimental runs with different random seeds. This creates pickle files for each run that will be executed in parallel.
-
+Set `data_generator.num_features` in the config to d, then:
 
 ```bash
-./venv/bin/python src/TSGP/experiments/initialize.py \
-    -f experiments_data/GP_Archive_5 \
+python src/TSGP/experiments/initialize.py \
+    -f experiments_data/GP_Archive_5_TSGP-2 \
     -a data_generator \
-    -n 50 \
-    -r 1000 \
-    -c examples/data_generator.yaml
+    -c examples/data_generator_TSGP-2.yaml \
+    -n 100 \
+    -r 1000
+
+python src/TSGP/experiments/run.py -f experiments_data/GP_Archive_5_TSGP-2 -n 100
 ```
 
-**Parameters:**
-- `-f`: Folder name for the experiment (where pickle files will be saved)
-- `-a`: Algorithm name (`data_generator`)
-- `-n`: Number of runs to generate
-- `-r`: Starting random seed (will increment for each run: 1000, 1001, 1002, ...)
-- `-c`: Path to configuration YAML file
+As with the search runs, several runners can work on one folder in parallel (see
+[EXPERIMENTS_GUIDE.md](EXPERIMENTS_GUIDE.md)).
 
-### 1.3 Execute Data Generation Runs
+The configs record the settings of the paper's archives, so regenerating them reproduces
+the training data of the published models.
 
-Run the experiments using the `run.py` script. 
+## Step 2: Similar pairs
 
-**Single machine:**
-```bash
-# Execute all runs sequentially
-./venv/bin/python src/TSGP/experiments/run.py \
-    -f experiments_data/GP_Archive_5 \
-    -n 50
-```
-
-**Parallel execution (recommended):**
-
-Using taskspooler (tsp) for parallel execution:
-```bash
-# Queue 50 parallel workers (each executes 1 run)
-for i in {1..50}; do 
-    tsp ./venv/bin/python src/TSGP/experiments/run.py \
-        -f experiments_data/GP_Archive_5 \
-        -n 1
-done
-
-# Set max parallel jobs (adjust based on your CPU cores)
-tsp -S 10  # Run 10 jobs simultaneously
-
-# Monitor queue
-tsp        # List all jobs
-tsp -t 0   # Show output of job ID 0
-tsp -C     # Clear finished jobs
-```
-
-**Parameters:**
-- `-f`: Folder containing the experiment pickle files
-- `-n`: Number of runs this runner should execute
-
-The runner script uses lock files to prevent conflicts - multiple runners can safely execute runs from the same folder.
-
-**What happens:**
-- Each run evolves a population of symbolic expressions
-- Expressions are simplified using SymPy
-- Unique expressions and their semantic vectors are stored in an archive
-- Archives are saved as pickle files in the configured output directory
-
-### 1.4 Generate Data for Multiple Dimensionalities
-
-To train a d-dimensional transformer model, generate archives with different dimensionalities.
-
-## Step 2: Semantic Similarity Search
-
-After generating archives, the next step is to find pairs of semantically similar expressions. This creates training pairs for the Transformer model.
-
-### 2.1 Run Similarity Search
-
-Use the `run_similarity_search.py` script to process your generated archives:
+For every archive file, a FAISS index finds the nearest neighbours of each program in
+semantic space. Pairs closer than `similarity_threshold` are kept and written next to the
+archive as `similar_pairs_<seed>.pkl`:
 
 ```bash
-./venv/bin/python examples/run_similarity_search.py --config examples/similarity_search.yaml
+python examples/run_similarity_search.py --config examples/similarity_search.yaml
 ```
 
-**Parameters:**
-- `--config`: Path to similarity search configuration YAML file
+The config lists all eight archive folders. Interrupted searches resume where they
+stopped.
 
-**What happens:**
-- Loads all expressions from archive files
-- Computes pairwise semantic distances (Euclidean distance)
-- Selects pairs within the similarity threshold
-- Saves pairs as (expression1, expression2, distance) tuples
-
-
-## Step 3: Pretraining the Transformer Model
-
-The final step is to train the Transformer model using the generated similarity pairs.
-
-### 3.1 Configure Pretraining
-
-Create or modify your pretraining configuration file (e.g., `examples/pretraining.yaml`).
-
-**Important:** Update the `archive_directories` paths in your configuration to match where you saved the archives from Step 1. By default, the configuration uses `experiments_data/GP_Archive_2/3/4/5`, but if you used different paths (e.g., `experiments_data/GP_Archive_5`), you must update these paths accordingly.
-
-### 3.2 Run Pretraining
-
-Execute the pretraining script:
+## Step 3: Pretraining
 
 ```bash
-./venv/bin/python examples/pretrain_transformer.py \
-    --config examples/pretraining.yaml
+python examples/pretrain_transformer.py --config examples/pretraining_TSGP.yaml
+python examples/pretrain_transformer.py --config examples/pretraining_TSGP-2.yaml
 ```
 
-**What happens:**
-- Loads all similarity pairs from specified archive directories
-- Creates vocabulary from functions, variables, and ephemerals
-- Builds encoder/decoder vectorization layers
-- Initializes Transformer model
-- Trains on (parent_expression → child_expression) mappings
-- Saves best model checkpoint based on validation loss
-- Logs training history to CSV
+Pretraining loads the pairs of the four archive folders of its corpus. It writes the
+pairs it trained on to `trainingdata/train_pairs_<corpus>.pkl`, plus a test file of
+further pairs, 10% of the training set's size. It keeps the checkpoint with the lowest
+validation loss in `src/TSGP/transformer/models/`. A retrained model is a new sample, not
+a copy of the published weights.

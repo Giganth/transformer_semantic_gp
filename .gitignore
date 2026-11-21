@@ -1,27 +1,22 @@
 venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pdf
-*.pkl
-.pytest_cache/
-
-# Ignore training data and experiment outputs
-trainingdata/**
-
-experiments_data/**
-!experiments_data/.gitkeep
-
-# Build artifacts
 *.egg-info/
 dist/
 build/
-
-# IDE
-.vscode/launch.json
 .idea/
-
-# OS
+.vscode/
 .DS_Store
 
+# Run outputs and generated training data
+experiments_data/**
+!experiments_data/logs/
+!experiments_data/results/
+!experiments_data/*/.gitkeep
+trainingdata/
 
+# Only the published models are tracked; retrained or other weights stay local.
+src/TSGP/transformer/models/*
+!src/TSGP/transformer/models/TSGP.weights.h5
+!src/TSGP/transformer/models/TSGP-2.weights.h5
+*_training_history*.csv

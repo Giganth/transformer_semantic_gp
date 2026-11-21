@@ -12,26 +12,33 @@ class StandardGP(BaseEvolutionaryAlgorithm):
         self.mutation_prob = config['variation']['mutation']['application_prob']
 
     def _variation(self, population: List) -> List:
-        """Apply crossover and mutation operators to the population."""
+        """Clone, shuffle to randomize mating, then apply crossover and mutation.
+
+        The shuffle breaks the positional link to ``population``, so each clone
+        carries ``parent_index`` for measures that need its origin.
+        """
         offspring = [self.toolbox.clone(ind) for ind in population]
+        for index, individual in enumerate(offspring):
+            individual.parent_index = index
         random.shuffle(offspring)
 
-        # Apply crossover
         for i in range(1, len(offspring), 2):
             if random.random() < self.crossover_prob:
                 offspring[i - 1], offspring[i] = self.toolbox.mate(offspring[i - 1], offspring[i])
                 del offspring[i - 1].fitness.values
                 del offspring[i].fitness.values
-                
-        # Apply mutation
+
         for i in range(len(offspring)):
             if random.random() < self.mutation_prob:
+                parent_index = offspring[i].parent_index
                 try:
                     offspring[i], = self.toolbox.mutate(offspring[i])
                     del offspring[i].fitness.values
                 except Exception:
                     offspring[i] = self.toolbox.createIndividual()
                     del offspring[i].fitness.values
+                # A failed mutation replaces the object, so re-tag it.
+                offspring[i].parent_index = parent_index
         return offspring
 
 

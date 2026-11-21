@@ -1,4 +1,3 @@
-# src/TSGP/transformer/__init__.py
 """Transformer module for TSGP project."""
 
 from .model import TransformerModel
@@ -14,7 +13,6 @@ from .utils import (
     prepare_transformer_config
 )
 
-# Export main classes for easy import
 __all__ = [
     'TransformerModel',
     'TransformerSampler',

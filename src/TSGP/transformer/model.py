@@ -1,4 +1,3 @@
-# src/TSGP/transformer/model.py
 """Transformer model definition for TSGP."""
 
 import tensorflow as tf
@@ -35,7 +34,6 @@ class TransformerModel:
                 - dec_vocab: Decoder vocabulary
                 - embed_dim: Embedding dimension
                 - variables: List of variable tokens
-                - legacy_mode: If True, use flat architecture for old weight compatibility (default: False)
         """
         self.config = config
         self.max_length = config['max_length']
@@ -52,24 +50,18 @@ class TransformerModel:
         self.dec_vocab = config.get('dec_vocab', None)
         self.embed_dim = config.get('embed_dim', None)
         self.variables = config.get('variables', None)
-        self.legacy_mode = self.config['legacy_mode']
         
-        # Create index lookup for decoder
         self.dec_index_lookup = dict(zip(range(len(self.dec_vocab)), self.dec_vocab)) if self.dec_vocab else None
-        self.vocab_keys = list(range(len(self.dec_vocab))) if self.dec_vocab else None
         
-        # Calculate number of float inputs
         self.amt_floats = sum([
             1 if self.include_distance else 0,
             1 if self.include_amt_variables else 0
         ])
         
-        # Build model
         self.model = self._build_model()
     
     def _build_model(self):
         """Build the Transformer model architecture."""
-        # Encoder
         encoder_inputs = tf.keras.Input(shape=(None,), dtype="int64", name="encoder_inputs")
         float_inputs = tf.keras.Input(shape=(self.amt_floats,), dtype="float32", name="float_inputs")
         
@@ -85,10 +77,8 @@ class TransformerModel:
         encoder_outputs = x
         encoder = tf.keras.Model([encoder_inputs, float_inputs], encoder_outputs, name="encoder")
         
-        # Explicitly enable masking support for the encoder model
         encoder.supports_masking = True
         
-        # Decoder
         decoder_inputs = tf.keras.Input(shape=(None,), dtype="int64", name="decoder_inputs")
         encoded_seq_inputs = tf.keras.Input(shape=(None, self.embed_dim + self.amt_floats), name="decoder_state_inputs")
         
@@ -106,19 +96,11 @@ class TransformerModel:
         decoder_outputs = layers.Dense(self.config['vocab_size'], activation="softmax")(x)
         decoder = tf.keras.Model([decoder_inputs, encoded_seq_inputs, float_inputs], decoder_outputs, name="decoder")
         
-        # Explicitly enable masking support for the decoder model
         decoder.supports_masking = True
         
-        # Connect encoder and decoder
-        if self.legacy_mode:
-            # Legacy mode: Use flat architecture (encoder/decoder outputs directly)
-            # This maintains compatibility with old saved weights
-            decoder_outputs = decoder([decoder_inputs, encoder_outputs, float_inputs])
-        else:
-            # New mode: Use nested model architecture (encoder/decoder as functional layers)
-            # This creates cleaner model structure with encoder and decoder as single layers
-            encoder_outputs = encoder([encoder_inputs, float_inputs])
-            decoder_outputs = decoder([decoder_inputs, encoder_outputs, float_inputs])
+        # Connect encoder and decoder as nested sub-models, so the sampler can run them separately
+        encoder_outputs = encoder([encoder_inputs, float_inputs])
+        decoder_outputs = decoder([decoder_inputs, encoder_outputs, float_inputs])
         
         # Learning rate schedule
         lr_schedule = optimizers.schedules.CosineDecay(
@@ -128,7 +110,6 @@ class TransformerModel:
             warmup_steps=self.config['decay_steps']/ 100
         )
         
-        # Create final model
         model = tf.keras.Model([encoder_inputs, decoder_inputs, float_inputs], decoder_outputs, name="transformer")
         model.compile(
             loss="sparse_categorical_crossentropy",
@@ -138,29 +119,3 @@ class TransformerModel:
         )
         
         return model
-    
-    def get_config(self):
-        """Return model configuration."""
-        return {
-            'max_length': self.max_length,
-            'latent_dim': self.latent_dim,
-            'num_heads': self.num_heads,
-            'num_stacks': self.num_stacks,
-            'dropout_rate': self.dropout_rate,
-            'learning_rate': self.learning_rate,
-            'include_distance': self.include_distance,
-            'include_amt_variables': self.include_amt_variables,
-            'vocab_size': self.config['vocab_size'],
-            'vocab_arity_dict': self.vocab_arity_dict,
-            'terminal_keys': self.terminal_keys,
-            'function_keys': self.function_keys,
-            'dec_vocab': self.dec_vocab,
-            'embed_dim': self.embed_dim,
-            'legacy_mode': self.legacy_mode
-        }
-    
-    def save_config(self, filepath):
-        """Save model configuration to file."""
-        import json
-        with open(filepath, 'w') as f:
-            json.dump(self.get_config(), f, indent=2)

@@ -5,29 +5,32 @@ from deap import gp
 from functools import partial
 
 def create_fitness_functions(config, pset, X_train, Y_train, X_test, Y_test, X_semantic) -> Tuple[Any, Any, Any]:
-    """ Create fitness evaluation functions for training, testing, and semantic distance."""
+    """ Create fitness evaluation functions for training, testing and semantic distance.
+
+    ``X_semantic`` may be None when semantic evaluation is disabled; its evaluator is then None.
+    """
     train_eval = partial(evaluate_SR, X=X_train, Y=Y_train, pset=pset, config=config)
     test_eval  = partial(evaluate_SR, X=X_test,  Y=Y_test,  pset=pset, config=config)
-    semantic_eval = partial(evaluate_Semantics, X=X_semantic, pset=pset)
+    semantic_eval = None if X_semantic is None else partial(evaluate_Semantics, X=X_semantic, pset=pset, config=config)
     return train_eval, test_eval, semantic_eval
 
 def evaluate_SR(
     individual, 
-    X: np.ndarray, 
-    Y: np.ndarray, 
-    pset, 
-    config: dict
-    ) -> tuple[float, np.ndarray]:    
+    X: np.ndarray,
+    Y: np.ndarray,
+    pset,
+    config: dict,
+    ) -> tuple[float, np.ndarray]:
     """
     Evaluate the symbolic regression individual on the provided dataset.
-    
+
     Args:
         individual: The GP individual to evaluate
         X: Input features (array-like)
         Y: Target values (array-like)
         pset: Primitive set for GP
         config: Configuration dictionary
-            
+
     Returns:
         tuple: (fitness value, output vector) for DEAP compatibility
     """
@@ -38,21 +41,14 @@ def evaluate_SR(
         print(str(individual))
         return (float('inf'), np.array([]))
 
-    output_vector = [np.float128(func(*x)) for x in X]
+    output_vector = [np.longdouble(func(*x)) for x in X]
 
-    if config['problem']['error_metric'] == 'MAE':
-        errors = [abs(np.float128(pred - y)) for pred, y in zip(output_vector, Y)]
-        fitness = sum(errors) / len(X)
-    elif config['problem']['error_metric'] == 'MSE':
-        errors = [np.float128((pred - y)) ** 2 for pred, y in zip(output_vector, Y)]
-        fitness = sum(errors) / len(X)
-    elif config['problem']['error_metric'] == 'RMSE':
-        errors = [np.float128((pred - y)) ** 2 for pred, y in zip(output_vector, Y)]
+    if config['problem']['error_metric'] == 'RMSE':
+        errors = [np.longdouble((pred - y)) ** 2 for pred, y in zip(output_vector, Y)]
         fitness = np.sqrt(sum(errors) / len(X))
     else:
         raise ValueError(f"Unknown error metric: {config['problem']['error_metric']}")
 
-    # Handle NaN
     if np.isnan(fitness):
         return (float('inf'), np.array(output_vector))
 
@@ -62,11 +58,10 @@ def evaluate_Semantics(
     individual, 
     X: np.ndarray, 
     pset, 
+    config: dict
     ) -> tuple[float, np.ndarray]:    
     """
     Evaluate the individual on a fixed, randomly generated, standardized dataset.
-    Returns infinite fitness — this function is used only to compute semantic output vectors,
-    not as a fitness measure.
     
     Args:
         individual: The GP individual to evaluate
@@ -83,6 +78,6 @@ def evaluate_Semantics(
         print(str(individual))
         return (float('inf'), np.array([]))
 
-    output_vector = [np.float128(func(*x)) for x in X]
+    output_vector = [np.longdouble(func(*x)) for x in X]
 
     return (float('inf'), np.array(output_vector))

@@ -25,7 +25,6 @@ def pow(base: float, exp: float) -> float:
             return 1.0  # Avoid complex numbers
         result = base ** exp
         
-        # Check for infinity or NaN
         if not np.isfinite(result):
             return 1.0
             
@@ -45,7 +44,6 @@ def create_pset(config: dict) -> gp.PrimitiveSet:
     """
     pset = gp.PrimitiveSet("MAIN", len(config['problem']['variables']))
 
-    # Add functions to the primitive set
     for func in config['problem']['functions']:
         if func == 'add':
             pset.addPrimitive(operator.add, 2)
@@ -54,19 +52,21 @@ def create_pset(config: dict) -> gp.PrimitiveSet:
         elif func == 'mul':
             pset.addPrimitive(operator.mul, 2)
         elif func == 'div':
+
             pset.addPrimitive(div, 2)
         elif func == 'pow':
             pset.addPrimitive(pow, 2)
+        else:
+            raise ValueError(f"Unknown function: {func}")
 
     rename_dict = {f'ARG{i}': var for i, var in enumerate(config['problem']['variables'])}
     pset.renameArguments(**rename_dict)
     
-    # Generate ephemeral values
     ephemeral_values = [
         float(round(i, 2)) for i in
         np.arange(float(config['problem']['ephemerals'][0]),
-                float(config['problem']['ephemerals'][1]) + 0.1,
-                0.1)
+                  float(config['problem']['ephemerals'][1]) + 0.1,
+                  0.1)
     ]
     
     eph_callable = partial(ephemeral_generator, ephemeral_values)

@@ -8,10 +8,11 @@ import yaml
 from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
+from matplotlib.backends.backend_pdf import PdfPages
 
 # Set plotting style
 rcParams['pdf.fonttype'] = 42
-rcParams['font.family'] = "Times New Roman"
+#rcParams['font.family'] = "Times New Roman"
 rcParams['font.size'] = 14
 
 # Color and style settings
@@ -19,6 +20,12 @@ colors = plt.cm.tab10.colors
 line_styles = ['-', '--', '-.', ':']
 shapes = ["o", "s", '^', 'd', '*', 'v', '<', '>', 'p', 'H']
 grid_background = "#ECECEC"
+
+# All best-fitness variants, in the order they should appear in plots
+BEST_FITNESS_METRICS = [
+    ("best_fitness", "Best Training Fitness"),
+    ("best_fitness_test", "Best Test Fitness"),
+]
 
 def load_experiment_metadata(folder_path):
     """Load metadata from experiment folder."""
@@ -46,12 +53,23 @@ def load_monitor_files(folder_path):
     # Load all monitor files
     dfs = []
     for file in monitor_files:
-        df = pd.read_csv(file)
+        try:
+            df = pd.read_csv(file)
+        except pd.errors.EmptyDataError:
+            print(f"  Skipping empty monitor file: {file}")
+            continue
+        if df.empty:
+            print(f"  Skipping empty monitor file: {file}")
+            continue
         dfs.append(df)
-    
+
+    if not dfs:
+        print(f"No non-empty monitor files found in {folder_path}")
+        return None
+
     # Concatenate all runs
     combined = pd.concat(dfs, ignore_index=True)
-    
+
     return combined
 
 def aggregate_data(df):
@@ -60,9 +78,9 @@ def aggregate_data(df):
     dict_to_group = {
         'best_fitness': ['median', ('q1', lambda x: x.quantile(0.25)), 
                         ('q2', lambda x: x.quantile(0.75)), 'mean', 'std'],
-        'best_fitness_test': ['median', ('q1', lambda x: x.quantile(0.25)), 
+        'best_fitness_test': ['median', ('q1', lambda x: x.quantile(0.25)),
                              ('q2', lambda x: x.quantile(0.75)), 'mean', 'std'],
-        'fitness_avg': ['median', ('q1', lambda x: x.quantile(0.25)), 
+        'fitness_avg': ['median', ('q1', lambda x: x.quantile(0.25)),
                         ('q2', lambda x: x.quantile(0.75)), 'mean', 'std'],
         'fitness_test_avg': ['median', ('q1', lambda x: x.quantile(0.25)), 
                              ('q2', lambda x: x.quantile(0.75)), 'mean', 'std'],
@@ -86,7 +104,11 @@ def aggregate_data(df):
                                   ('q2', lambda x: x.quantile(0.75)), 'mean', 'std'],
         'semantic_distance_75percentile': ['median', ('q1', lambda x: x.quantile(0.25)), 
                                           ('q2', lambda x: x.quantile(0.75)), 'mean', 'std'],
+        
     }
+    
+    # Only include columns that exist in the data
+    dict_to_group = {k: v for k, v in dict_to_group.items() if k in df.columns}
     
     # Aggregate by generation
     aggr = df.groupby('generation').agg(dict_to_group)
@@ -96,6 +118,55 @@ def aggregate_data(df):
     aggr = aggr.reset_index()
     
     return aggr
+
+def final_generation_values(df):
+    """Return one row per run, taken at that run's last generation."""
+    run_key = 'seed' if 'seed' in df.columns else None
+    if run_key is None:
+        # Fall back to the last generation present across the whole frame
+        return df[df['generation'] == df['generation'].max()]
+    last_idx = df.groupby(run_key)['generation'].idxmax()
+    return df.loc[last_idx]
+
+def plot_boxplots(final_list, names, title):
+    """Boxplot of the final-generation best fitness of every run, one panel per metric."""
+    metrics = [(m, label) for m, label in BEST_FITNESS_METRICS
+               if any(m in final for final in final_list)]
+    if not metrics:
+        return None
+
+    fig, axs = plt.subplots(1, len(metrics), figsize=(6 * len(metrics), 6), squeeze=False)
+    axs = axs[0]
+    fig.suptitle(f"{title} - Final Generation Best Fitness", fontsize=20, fontweight='bold')
+
+    for ax, (metric, label) in zip(axs, metrics):
+        data, tick_labels, box_colors = [], [], []
+        for i, (final, name) in enumerate(zip(final_list, names)):
+            if metric not in final:
+                continue
+            values = final[metric].replace([np.inf, -np.inf], np.nan).dropna()
+            if values.empty:
+                continue
+            data.append(values.values)
+            tick_labels.append(name)
+            box_colors.append(colors[i % len(colors)])
+
+        if not data:
+            ax.set_visible(False)
+            continue
+
+        bp = ax.boxplot(data, tick_labels=tick_labels, patch_artist=True, showmeans=True)
+        for patch, color in zip(bp['boxes'], box_colors):
+            patch.set_facecolor(color)
+            patch.set_alpha(0.4)
+
+        ax.grid(color=grid_background, linestyle='--', linewidth=0.5)
+        ax.set_title(label)
+        ax.set_ylabel("Fitness (RMSE)")
+        ax.tick_params(axis='x', rotation=20)
+
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    return fig
 
 def plot_inter_run_variability(ax, aggr, metric, aggregate, title, y_label, color, name, line_style, shape, step_size=5, ylim=None):
     """Plot the variability *between* runs (inter-run variability)."""
@@ -133,15 +204,27 @@ def plot_inter_run_variability(ax, aggr, metric, aggregate, title, y_label, colo
     ax.set_ylabel(y_label)
     ax.set_title(title)
 
-def plot_intra_run_variability(ax, aggr, metric, aggregate, title, y_label, color, name, line_style, shape, step_size=5, ylim=None):
+def plot_intra_run_variability(ax, aggr, metric, aggregate, title, y_label, color, name, line_style, shape, step_size=5, ylim=None, ribbon_lower=None, ribbon_upper=None):
     """
     Plot the intra-run variability (*within* individual runs) aggregated over multiple runs.
+    
+    Args:
+        ribbon_lower: Column name for lower ribbon bound (without aggregate suffix).
+                     Defaults to '{metric_base}_25percentile'.
+        ribbon_upper: Column name for upper ribbon bound (without aggregate suffix).
+                     Defaults to '{metric_base}_75percentile'.
     """
     thinned = list(range(0, len(aggr), step_size))
     if aggregate != "median":
         raise ValueError("Intra-run variability plotting currently only supports 'median' aggregate.")
     
     metric_base = metric.rsplit('_median', 1)[0]
+    
+    # Default ribbon columns
+    if ribbon_lower is None:
+        ribbon_lower = f"{metric_base}_25percentile"
+    if ribbon_upper is None:
+        ribbon_upper = f"{metric_base}_75percentile"
 
     # Plot main line
     ax.plot(aggr["generation"], aggr[f"{metric}_{aggregate}"], 
@@ -154,8 +237,8 @@ def plot_intra_run_variability(ax, aggr, metric, aggregate, title, y_label, colo
     # Add confidence ribbon
     if aggregate == "median":
         ax.fill_between(aggr["generation"],
-                        aggr[f"{metric_base}_25percentile_{aggregate}"],
-                        aggr[f"{metric_base}_75percentile_{aggregate}"],
+                        aggr[f"{ribbon_lower}_{aggregate}"],
+                        aggr[f"{ribbon_upper}_{aggregate}"],
                         color=color, alpha=0.1)
     else:
         raise NotImplementedError("Intra-run variability with mean/std not implemented.")
@@ -185,6 +268,9 @@ def main():
     parser.add_argument('--title',
                         help='Main title for the plots',
                         default='Experiments')
+    parser.add_argument('--boxplots', action=argparse.BooleanOptionalAction,
+                        help='Add a page with boxplots of the final-generation best fitness of every run',
+                        default=True)
     args = parser.parse_args()
     
     # Convert folder paths to Path objects
@@ -202,40 +288,46 @@ def main():
     
     # Load and aggregate data from all folders
     aggr_list = []
+    final_list = []
     metadata_list = []
-    
+    plot_names = []
+    plot_folders = []
+
     print(f"\nLoading data from {len(folders)} experiment folders...")
     for i, folder in enumerate(folders):
         print(f"\nProcessing: {folder}")
-        
-        # Load metadata
-        metadata = load_experiment_metadata(folder)
-        metadata_list.append(metadata)
-        
+
         # Load monitor files
         df = load_monitor_files(folder)
         if df is None:
             print(f"Skipping {folder} - no data found")
             continue
-        
+
         # Convert time to hours
         df["time_used"] = df["time_used"] / 3600
-        
+
         # Aggregate
         aggr = aggregate_data(df)
         aggr_list.append(aggr)
-        
+        final_list.append(final_generation_values(df))
+        metadata_list.append(load_experiment_metadata(folder))
+        plot_names.append(names[i])
+        plot_folders.append(folder)
+
         print(f"  Loaded {len(df)} total records from {folder}")
         print(f"  Generations: {aggr['generation'].min()} to {aggr['generation'].max()}")
-    
+
     if not aggr_list:
         print("No data to plot!")
         return
-    
+
+    names = plot_names
+
     # Create figure with subplots
-    num_rows = 4
+    num_plots = 8
     num_cols = 2
-    fig, axs = plt.subplots(num_rows, num_cols, figsize=(18, 28))
+    num_rows = num_plots // num_cols
+    fig, axs = plt.subplots(num_rows, num_cols, figsize=(18, 6.8 * num_rows))
     axs = axs.flatten()
     plt.subplots_adjust(top=0.95, hspace=0.3, wspace=0.3)
     
@@ -248,7 +340,7 @@ def main():
         info_text = f"Dataset: {metadata['problem']['dataset']}\n" \
                    f"Population Size: {metadata['popsize']}\n" \
                    f"Functions: {metadata['problem']['functions']}\n" \
-                   f"Runs: {len(glob.glob(str(folders[0] / 'monitor_run_*.csv')))}"
+                   f"Runs: {len(glob.glob(str(plot_folders[0] / 'monitor_run_*.csv')))}"
         
         fig.text(0.02, 0.96, info_text, ha='left', va='top', fontsize=10,
                 bbox=dict(boxstyle="round", alpha=0.1, edgecolor='none', facecolor='lightgrey'))
@@ -307,12 +399,16 @@ def main():
         # Semantic distance
         plot_intra_run_variability(axs[6], aggr, "semantic_distance_median", "median",
                      "Semantic Distance (Parent-Child) Over Generations (Intra-Run Variability)",
-                     "Euclidean Distance", color, name, line_style, shape, ylim = 100)
+                     "Euclidean Distance", color, name, line_style, shape, ylim = 10)
         
         # Median training fitness
         plot_intra_run_variability(axs[7], aggr, "fitness_median", "median",
                      "Median Training Fitness Over Generations (Intra-Run Variability)",
-                     "Fitness (RMSE)", color, name, line_style, shape, ylim = 5)
+                     "Fitness (RMSE)", color, name, line_style, shape, ylim = 2)
+
+    # Hide unused subplots
+    for idx in range(num_plots, num_rows * num_cols):
+        axs[idx].set_visible(False)
     
     # Create custom legend handles with markers
     handles = []
@@ -331,11 +427,20 @@ def main():
     # Save to PDF
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, format="pdf", orientation="landscape", bbox_inches='tight')
+
+    box_fig = plot_boxplots(final_list, names, args.title) if args.boxplots else None
+
+    with PdfPages(output_path) as pdf:
+        pdf.savefig(fig, orientation="landscape", bbox_inches='tight')
+        if box_fig is not None:
+            pdf.savefig(box_fig, orientation="landscape", bbox_inches='tight')
+
     print(f"\n{'='*80}")
     print(f"Plot saved to: {output_path}")
     print(f"{'='*80}")
-    plt.close()
+    plt.close(fig)
+    if box_fig is not None:
+        plt.close(box_fig)
 
 if __name__ == "__main__":
     main()

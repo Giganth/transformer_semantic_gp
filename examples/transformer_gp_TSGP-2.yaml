@@ -1,5 +1,5 @@
-# Example Transformer GP Configuration
-# Use with: python examples/symbolic_regression.py --config examples/transformer_gp.yaml
+# Search configuration of TSGP-2 (transformer pretrained on the mixed corpus)
+# Use with: python examples/symbolic_regression.py --config examples/transformer_gp_TSGP-2.yaml
 
 # Algorithm type
 algorithm: transformer_gp
@@ -21,9 +21,8 @@ selection:
 # Transformer variation settings
 variation:
   transformer:
-    model_directory: src/TSGP/transformer/models/TSGP.weights.h5  # Path to pretrained model. 
+    model_directory: src/TSGP/transformer/models/TSGP-2.weights.h5  # Path to pretrained model
     target_semantic_distance: 1.0  #  Target semantic distance for sampling (lower = more exploitation - higher = more exploration, default 1.0)
-
 
 # Termination conditions
 termination:
@@ -31,13 +30,14 @@ termination:
 
 # Problem-specific settings
 problem:
-  dataset: feynman_I_43_43  # Dataset name
+  dataset: feynman_I_34_27  # Dataset name
   functions: ['add', 'sub', 'mul', 'div', 'pow']  # Available functions
   ephemerals: [-0.5, 0.5]  # Range for ephemeral constants
-  test_split_ratio: 0.25  # Train/test split (default 0.25)
+  test_split_ratio: 0.25  # Train/test split
   subsample: True # Whether to subsample data on large datasets to max 10000 samples
   error_metric: RMSE  # Error metric
   standardization: True  # Whether to standardize data
+  load_semantic_testset: True 
 
 # Reproducibility
 random_seed: 1000
@@ -46,7 +46,7 @@ random_seed: 1000
 use_gpu: True  # Whether to use GPU for TensorFlow operations (default: True)
 
 # Parallelization for Evaluation
-num_cores: 10
+num_cores: 32
 
 # Logging
 console_out: True

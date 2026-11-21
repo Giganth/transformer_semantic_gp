@@ -3,7 +3,7 @@
 Pretrain Transformer model for TSGP.
 
 Example usage:
-    python examples/pretrain_transformer.py --config examples/pretraining.yaml
+    python examples/pretrain_transformer.py --config examples/pretraining_TSGP-2.yaml
 """
 
 import argparse
@@ -19,20 +19,17 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default="examples/pretraining.yaml",
-        help="Path to pretraining configuration file (default: examples/pretraining.yaml)"
+        default="examples/pretraining_TSGP-2.yaml",
+        help="Path to pretraining configuration file (default: examples/pretraining_TSGP-2.yaml)"
     )
     
     args = parser.parse_args()
     
-    # Load configuration
     print(f"Loading configuration from: {args.config}")
     config = ConfigLoader.load(config_path=args.config,algorithm="transformer_gp")
     
-    # Create pretrainer
     pretrainer = TransformerPretrainer(config)
     
-    # Run pretraining
     history = pretrainer.run()
     
     print("\nPretraining completed successfully!")
