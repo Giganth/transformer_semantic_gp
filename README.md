@@ -1,14 +1,36 @@
 # Transformer Semantic Genetic Programming
 
 <p align="center">
-  <a href="https://github.com/Giganth/transformer_semantic_gp/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge"></a>
-  <a href="https://dl.acm.org/doi/abs/10.1145/3712256.3726412"><img src="https://img.shields.io/badge/DOI-10.1145/3712256.3726412-blue.svg?style=for-the-badge&logo=ACM"></a>
-  <a href="https://arxiv.org/abs/2511.09416"><img src="https://img.shields.io/badge/arXiv-2511.09416-b31b1b.svg?logo=arxiv&style=for-the-badge"></a>
+  <a href="https://github.com/Giganth/transformer_semantic_gp/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/Giganth/transformer_semantic_gp/ci.yml?branch=main&amp;style=for-the-badge&amp;label=CI" alt="CI"></a>
+  <a href="https://github.com/Giganth/transformer_semantic_gp/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-yellow?style=for-the-badge" alt="License"></a>
+  <a href="https://dl.acm.org/doi/10.1145/3845808"><img src="https://img.shields.io/badge/TELO-10.1145%2F3845808-blue?style=for-the-badge&amp;logo=acm&amp;logoColor=white" alt="TELO 2026"></a>
 </p>
+
 Transformer Semantic Genetic Programming (TSGP) is a semantic GP approach that uses a pre-trained
 transformer model as a variation operator to generate offspring programs with high semantic similarity
 to a given parent. Unlike other semantic GP approaches that rely on fixed syntactic transformations, TSGP
 learns diverse structural variations that lead to offspring with similar semantics.
+
+## Contents
+
+- [Versions and papers](#versions-and-papers)
+- [Installation](#installation)
+- [Quick start](#quick-start)
+- [Datasets](#datasets)
+- [Running experiments](#running-experiments)
+- [Building your own model](#building-your-own-model)
+- [Repository structure](#repository-structure)
+- [Citation](#citation)
+- [License](#license)
+
+## Versions and papers
+
+| Version | Paper | Novelty | Model |
+|---|---|---|---|
+| [2](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP2) | Anthes, Geiger, Briesch, and Rothlauf, 2026, [arXiv:2611.17455](https://arxiv.org/abs/2611.17455) — *TSGP-2: On the Non-Linearity of Symbolic Regression Problems and How to Exploit It with Model-based Semantic Genetic Programming* | Improved training data | `TSGP-2.weights.h5` in tag `TSGP2` |
+| [1](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP) | Anthes, Sobania, and Rothlauf, 2026, [DOI 10.1145/3845808](https://dl.acm.org/doi/10.1145/3845808) — *Transformer Semantic Genetic Programming for d-dimensional Symbolic Regression Problems* (TELO 2026) | Multi-dimensional model | `TSGP.weights.h5` in this repository; the original model of the paper runs on [figshare](https://doi.org/10.6084/m9.figshare.30601235) (activate `legacy_mode`) |
+| [1](https://github.com/Giganth/transformer_semantic_gp/tree/TSGP) | Anthes, 2026, [DOI 10.1007/978-3-032-23005-8_4](https://doi.org/10.1007/978-3-032-23005-8_4) — *Syntactic Flexibility Enables Compact Solutions in Transformer Semantic GP* (EuroGP 2026, pp. 51–66) | Syntactical variation analysis | `TSGP.weights.h5` in this repository; the original model of the paper runs on [figshare](https://doi.org/10.6084/m9.figshare.30601235) (activate `legacy_mode`) |
+| – | Anthes, Sobania, and Rothlauf, 2025, [DOI 10.1145/3712256.3726412](https://dl.acm.org/doi/10.1145/3712256.3726412) — *Transformer Semantic Genetic Programming for Symbolic Regression* (GECCO 2025) | Learning semantic variations | not supported in this implementation |
 
 ## Installation
 ```bash
@@ -75,7 +97,7 @@ See [`pyproject.toml`](pyproject.toml) or [`requirements.txt`](requirements.txt)
 - Analyzing and visualizing results
 
 ## Model Building
-The repository includes pre-trained transformer weights (`TSGP.weights.h5`). The training data used to train the transformer is available on [Figshare](https://figshare.com/s/a5a941c06dcd547f877f). To train your own model, follow the comprehensive guide:
+The repository includes pre-trained transformer weights (`TSGP.weights.h5`). The training data used to train the transformer is available on [Figshare](https://doi.org/10.6084/m9.figshare.30601235). To train your own model, follow the comprehensive guide:
 
 <p align="center">
   <a href="misc/TSGP_Model_Building.pdf">
@@ -98,30 +120,35 @@ Edit YAML files in `examples/` to customize:
 
 
 ## Citation
-If you use TSGP in your research, please cite:
+If you use this code, cite:
 
 ```bibtex
-@inproceedings{anthes2025transformer,
-  title={Transformer Semantic Genetic Programming for Symbolic Regression},
+@article{anthes2026dimensional,
+  title={Transformer Semantic Genetic Programming for d-dimensional Symbolic Regression Problems},
   author={Anthes, Philipp and Sobania, Dominik and Rothlauf, Franz},
-  booktitle={Proceedings of the Genetic and Evolutionary Computation Conference},
-  pages={952--960},
-  year={2025}
+  journal={ACM Transactions on Evolutionary Learning and Optimization},
+  volume={1},
+  number={1},
+  year={2026},
+  doi={10.1145/3845808}
 }
 ```
 
-> **Note:** This repository is based on the latest paper (Anthes et al., 2025, arXiv:2511.09416). The codebase has been completely refactored and a new improved transformer model is trained, so results may diverge slightly from those reported in the paper. If you want to use the model used for the experiments, activate 'legacy_mode' and download the model here: https://figshare.com/s/a5a941c06dcd547f877f.
+The conference version is *Transformer Semantic Genetic Programming for Symbolic Regression*
+(GECCO 2025, [DOI 10.1145/3712256.3726412](https://dl.acm.org/doi/10.1145/3712256.3726412)).
 
-This repository is based on DEAP. Please also cite:
+> **Note:** This repository is based on the paper *Transformer Semantic Genetic Programming for d-dimensional Symbolic Regression Problems* (Anthes, Sobania, and Rothlauf, 2026, [DOI 10.1145/3845808](https://dl.acm.org/doi/10.1145/3845808)). The codebase has been completely refactored and a new improved transformer model is trained, so results may diverge slightly from those reported in the paper. If you want to use the model used for the experiments, activate `legacy_mode` and download the model here: https://doi.org/10.6084/m9.figshare.30601235.
+
+TSGP is built on [DEAP](https://github.com/DEAP/deap):
 
 ```bibtex
 @article{DEAP_JMLR2012,
-    author    = " F\'elix-Antoine Fortin and Fran\c{c}ois-Michel {De Rainville} and Marc-Andr\'e Gardner and Marc Parizeau and Christian Gagn\'e ",
-    title     = { {DEAP}: Evolutionary Algorithms Made Easy },
-    pages     = { 2171--2175 },
-    volume    = { 13 },
-    month     = { jul },
-    year      = { 2012 },
-    journal   = { Journal of Machine Learning Research }
+  author  = {Fortin, F\'elix-Antoine and De Rainville, Fran\c{c}ois-Michel and
+             Gardner, Marc-Andr\'e and Parizeau, Marc and Gagn\'e, Christian},
+  title   = {{DEAP}: Evolutionary Algorithms Made Easy},
+  journal = {Journal of Machine Learning Research},
+  volume  = {13},
+  pages   = {2171--2175},
+  year    = {2012}
 }
 ```
